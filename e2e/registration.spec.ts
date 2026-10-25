@@ -120,7 +120,7 @@ test('event page shows the games with icons, and a registrant can edit then canc
   await page.getByRole('button', { name: 'Save changes' }).click()
   await expect(page.locator('[data-r="0"][data-c="name"]')).toHaveValue('Test Person Edited')
   await page.getByRole('button', { name: 'Cancel registration' }).click()
-  await expect(page.getByText('This registration is cancelled.')).toBeVisible()
+  await expect(page.getByText(/This registration is cancelled/)).toBeVisible()
 })
 
 test('event day: staff invites, gate check-in without photos, walk-ins, sport admin scope, revoke', async ({ page, browser }) => {
@@ -240,4 +240,94 @@ test('event day: staff invites, gate check-in without photos, walk-ins, sport ad
   const stranger = await (await browser.newContext()).newPage()
   await stranger.goto('/c/jsg/staff/join/not-a-real-token')
   await expect(stranger.getByText(/invite link has expired/)).toBeVisible()
+})
+
+async function registerFamily(page: import('@playwright/test').Page, who: string, mobile: string) {
+  await page.goto('/c/jsg/e/1/register')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('Your name').fill(who)
+  await page.getByLabel('Your mobile').fill(mobile)
+  await page.getByLabel('Emergency contact name').fill('Em Contact')
+  await page.getByLabel('Emergency contact mobile').fill('9899999999')
+  await page.locator('[data-r="0"][data-c="name"]').fill(who)
+  await page.locator('[data-r="0"][data-c="age"]').fill('40')
+  await page.locator('[data-r="0"][data-c="gender"]').selectOption('Female')
+  await page.locator('[data-r="0"][data-c="mobile"]').fill(mobile)
+  await page.locator('tr[data-row="0"] td[data-label="Sports"] label', { hasText: 'Carrom' }).click()
+  await page.locator('[data-r="0"][data-c="skill"]').selectOption('casual')
+  await page.getByLabel('I accept the injury waiver').check()
+  await page.getByRole('button', { name: 'Submit registration' }).click()
+  await expect(page.getByText(/Registration saved/)).toBeVisible()
+  const ref = (await page.getByText(/^Reference/).first().textContent())!.match(/HR-[0-9A-F]{8}/)![0]
+  const regUrl = page.url().split('?')[0]
+  const ticketUrl = await page.getByRole('link', { name: 'Show my QR ticket' }).getAttribute('href')
+  return { ref, regUrl, ticketUrl: ticketUrl! }
+}
+
+test('admin approves and rejects; rejected or cancelled QR codes stop working and can be reinstated', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  const alpha = await registerFamily(page, 'Review Alpha', '9700000001')
+  const beta = await registerFamily(page, 'Review Beta', '9700000002')
+
+  const admin = await (await browser.newContext()).newPage()
+  await admin.goto('/c/jsg/admin/login')
+  await admin.waitForLoadState('networkidle')
+  await admin.getByLabel('Admin password').fill('e2e-password')
+  await admin.getByRole('button', { name: 'Sign in' }).click()
+  await expect(admin.getByRole('heading', { name: 'Admin console' })).toBeVisible()
+
+  // Review queue: approve Alpha, reject Beta with a reason.
+  await admin.goto('/c/jsg/admin/events/1/review')
+  await expect(admin.getByRole('heading', { name: /Approve registrations/ })).toBeVisible()
+  await admin.locator('section', { hasText: alpha.ref }).getByRole('button', { name: 'Approve' }).click()
+  await expect(admin.locator('section', { hasText: alpha.ref })).toHaveCount(0)
+  await admin.locator('section', { hasText: beta.ref }).getByLabel(`Note for ${beta.ref}`).fill('Not a member of the group')
+  await admin.locator('section', { hasText: beta.ref }).getByRole('button', { name: 'Reject' }).click()
+  await expect(admin.locator('section', { hasText: beta.ref })).toHaveCount(0)
+
+  // Beta sees why, and the QR is dead. Alpha's QR works.
+  await page.goto(beta.regUrl)
+  await expect(page.getByText('Your registration was not approved.')).toBeVisible()
+  await expect(page.getByText(/Not a member of the group/).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Show my QR ticket' })).toHaveCount(0)
+  await page.goto(beta.ticketUrl)
+  await expect(page.getByText('This ticket is not valid')).toBeVisible()
+  await expect(page.locator('[role="img"][aria-label^="QR code"]')).toHaveCount(0)
+  await page.goto(alpha.ticketUrl)
+  await expect(page.locator('[role="img"][aria-label^="QR code"]')).toBeVisible()
+
+  // The gate refuses the rejected ticket and shows why.
+  await admin.goto(`/c/jsg/staff/gate?t=${encodeURIComponent(beta.ticketUrl.split('/t/')[1])}`)
+  await expect(admin.getByText('DO NOT ADMIT: ticket deactivated')).toBeVisible()
+  await expect(admin.getByText(/Not a member of the group/).first()).toBeVisible()
+  await expect(admin.getByRole('button', { name: 'Admit selected' })).toHaveCount(0)
+
+  // Alpha cancels herself: the QR stops working and the gate says who cancelled.
+  await page.goto(alpha.regUrl)
+  await page.getByRole('button', { name: 'Cancel registration' }).click()
+  await expect(page.getByText(/cancelled and its QR ticket no longer works/)).toBeVisible()
+  await page.goto(alpha.ticketUrl)
+  await expect(page.getByText('This ticket is not valid')).toBeVisible()
+  await admin.goto(`/c/jsg/staff/gate?q=${alpha.ref}`)
+  await admin.getByText('Review Alpha').first().click()
+  await expect(admin.getByText('Cancelled by the registrant')).toBeVisible()
+  await expect(admin.getByRole('button', { name: 'Admit selected' })).toHaveCount(0)
+
+  // An admin reinstates Beta from the workspace; her QR works again.
+  admin.on('dialog', (d) => d.accept())
+  await admin.goto('/c/jsg/admin/events/1/registrations?q=Review+Beta')
+  await admin.getByLabel('Select Review Beta').check()
+  await admin.locator('select[name="action"]').selectOption('confirm')
+  await admin.getByRole('button', { name: 'Apply to selected' }).click()
+  await expect(admin.locator('td .tag', { hasText: 'approved' }).first()).toBeVisible()
+  await page.goto(beta.ticketUrl)
+  await expect(page.locator('[role="img"][aria-label^="QR code"]')).toBeVisible()
+
+  // Editing the event must not wipe the gate and spot-desk settings.
+  await admin.goto('/c/jsg/admin/events/1')
+  await admin.getByRole('button', { name: 'Save event' }).click()
+  await expect(admin.getByRole('heading', { name: 'Edit event' })).toBeVisible()
+  await admin.goto('/c/jsg/admin/staff')
+  await expect(admin.getByLabel(/Check-in points/)).toHaveValue(/Main gate/)
+  await expect(admin.getByLabel('Spot registration is open')).toBeChecked()
 })

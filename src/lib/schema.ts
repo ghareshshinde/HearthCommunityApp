@@ -39,6 +39,10 @@ create table if not exists registration (
   emergency_mobile text not null,
   waiver_at text not null,
   source text not null default 'online',
+  rejected integer not null default 0,     -- 1 = rejected by an admin (status stays 'cancelled' so the QR is off and seats are freed)
+  decision_note text not null default '',
+  decided_by text,
+  decided_at text,
   status text not null default 'pending' check (status in ('pending','confirmed','cancelled')),
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),

@@ -98,10 +98,11 @@ export async function saveEventAction(slug: string, eventId: number | null, form
   const title = String(form.get('title') ?? '').trim()
   if (!title || !sports.length) throw new Error('Title and at least one sport are required')
   const waiver = String(form.get('waiver') ?? '').trim().slice(0, 1000)
+  const existing = eventId ? JSON.parse(repo.getEvent(c.id, eventId)?.config || '{}') : {}
   const id = repo.saveEvent(c.id, eventId, {
     title, description: String(form.get('description') ?? ''), venue: String(form.get('venue') ?? ''), map_url: String(form.get('map_url') ?? ''),
     starts_at: istInputToIso(String(form.get('starts_at') ?? '')), ends_at: istInputToIso(String(form.get('ends_at') ?? '')),
-    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ columns: cols, capacity, ages, waiver }),
+    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ ...existing, columns: cols, capacity, ages, waiver, approvalRequired: form.get('approvalRequired') === 'on' }),
     status: (['draft', 'published', 'closed'].includes(String(form.get('status'))) ? String(form.get('status')) : 'draft') as 'draft',
   })
   repo.audit(c.id, 'admin', eventId ? 'event.updated' : 'event.created', String(id), { title })
@@ -121,9 +122,9 @@ export async function editParticipantAction(slug: string, id: number, field: rep
 export async function bulkActionForm(slug: string, eventId: number, form: FormData) {
   const c = await adminCtx(slug)
   const action = String(form.get('action')) as repo.BulkAction
-  if (!['verify', 'unverify', 'confirm', 'cancel', 'member', 'guest', 'promote'].includes(action)) return
+  if (!['verify', 'unverify', 'confirm', 'reject', 'cancel', 'member', 'guest', 'promote'].includes(action)) return
   const ids = form.getAll('ids').map(Number).filter(Number.isInteger)
-  repo.bulkAction(c.id, ids, action, 'admin')
+  repo.bulkAction(c.id, ids, action, 'admin', String(form.get('note') ?? '').trim())
   await persist()
   revalidatePath(`/c/${slug}/admin`)
   redirect(`/c/${slug}/admin/events/${eventId}/registrations?${new URLSearchParams(String(form.get('qs') ?? ''))}`)
@@ -161,4 +162,15 @@ export async function changePasswordAction(slug: string, _prev: { error?: string
   repo.audit(c.id, 'admin', 'admin.password_changed')
   await persist()
   return { ok: true }
+}
+
+// ---------- admin: approve or reject ----------
+export async function decideRegistrationAction(slug: string, eventId: number, registrationId: number, decision: 'approve' | 'reject', form: FormData) {
+  const c = await adminCtx(slug)
+  const note = String(form.get('note') ?? '').trim()
+  if (decision === 'approve') repo.approveRegistration(c.id, registrationId, 'admin', note)
+  else repo.rejectRegistration(c.id, registrationId, 'admin', note)
+  await persist()
+  revalidatePath(`/c/${slug}/admin`)
+  redirect(`/c/${slug}/admin/events/${eventId}/review`)
 }

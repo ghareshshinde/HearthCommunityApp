@@ -19,6 +19,10 @@ export function getDb(): DatabaseSync {
   addColumn(db, 'participant', 'checked_in_by', 'text')
   addColumn(db, 'participant', 'checked_in_gate', 'text')
   addColumn(db, 'registration', 'source', "text not null default 'online'")
+  addColumn(db, 'registration', 'rejected', 'integer not null default 0')
+  addColumn(db, 'registration', 'decision_note', "text not null default ''")
+  addColumn(db, 'registration', 'decided_by', 'text')
+  addColumn(db, 'registration', 'decided_at', 'text')
   return db
 }
 

@@ -13,6 +13,7 @@ export type RegistrationRow = {
   id: number; community_id: number; event_id: number; ref: string; token: string; registrant_name: string; registrant_mobile: string
   registrant_email: string; emergency_name: string; emergency_mobile: string; waiver_at: string; status: 'pending' | 'confirmed' | 'cancelled'
   created_at: string; updated_at: string; source: string
+  rejected: number; decision_note: string; decided_by: string | null; decided_at: string | null
 }
 export type ParticipantRow = {
   id: number; community_id: number; event_id: number; registration_id: number; name: string; age: number; gender: 'Male' | 'Female'
@@ -210,9 +211,55 @@ export function updateRegistration(ev: EventRow, reg: RegistrationRow, contact: 
 
 export function cancelRegistration(ev: EventRow, reg: RegistrationRow, actor: string, now = new Date()) {
   if (actor === 'public' && !isOpen(ev, now)) return false
-  db().prepare("update registration set status='cancelled', updated_at=? where community_id=? and id=?").run(now.toISOString(), reg.community_id, reg.id)
+  db().prepare("update registration set status='cancelled', rejected=0, decided_by=?, decided_at=?, updated_at=? where community_id=? and id=?").run(actor, now.toISOString(), now.toISOString(), reg.community_id, reg.id)
   audit(reg.community_id, actor, 'registration.cancelled', reg.ref)
   return true
+}
+
+// ---------- approval and ticket validity ----------
+export type RegState = 'pending' | 'approved' | 'rejected' | 'cancelled'
+export const regState = (r: { status: string; rejected: number }): RegState =>
+  r.status === 'confirmed' ? 'approved' : r.status === 'cancelled' ? (r.rejected ? 'rejected' : 'cancelled') : 'pending'
+
+export type TicketStatus = { valid: boolean; state: RegState; reason: string }
+/** A QR ticket works only while its registration is live. Rejected and cancelled tickets are dead; pending ones too when the event requires approval. */
+export function ticketStatus(reg: Pick<RegistrationRow, 'status' | 'rejected' | 'decision_note' | 'decided_by'>, approvalRequired: boolean): TicketStatus {
+  const state = regState(reg)
+  if (state === 'rejected') return { valid: false, state, reason: `Rejected by the organisers${reg.decision_note ? `: ${reg.decision_note}` : ''}` }
+  if (state === 'cancelled') return { valid: false, state, reason: reg.decided_by && reg.decided_by !== 'public' ? 'Cancelled by the organisers' : 'Cancelled by the registrant' }
+  if (state === 'pending' && approvalRequired) return { valid: false, state, reason: 'Waiting for approval by the organisers' }
+  return { valid: true, state, reason: '' }
+}
+
+function queueDecisionEmail(reg: RegistrationRow, subject: string, body: string) {
+  if (reg.registrant_email) queueEmail(reg.community_id, reg.registrant_email, subject, body)
+}
+
+/** Approve (or reinstate) a registration. Its QR ticket becomes valid again at once. */
+export function approveRegistration(cid: number, id: number, by: string, note = '', now = new Date()): boolean {
+  const reg = getRegistrationById(cid, id)
+  if (!reg) return false
+  const was = regState(reg)
+  db().prepare("update registration set status='confirmed', rejected=0, decision_note=?, decided_by=?, decided_at=?, updated_at=? where community_id=? and id=?").run(note, by, now.toISOString(), now.toISOString(), cid, id)
+  audit(cid, by, was === 'rejected' || was === 'cancelled' ? 'registration.reinstated' : 'registration.approved', reg.ref, { note })
+  queueDecisionEmail(reg, 'Your registration is approved', `Reference ${reg.ref} is approved. Your QR ticket is ready on your registration page.`)
+  return true
+}
+
+/** Reject a registration. The QR stops working, its seats are freed, and the registrant sees the reason. */
+export function rejectRegistration(cid: number, id: number, by: string, reason: string, now = new Date()): boolean {
+  const reg = getRegistrationById(cid, id)
+  if (!reg) return false
+  db().prepare("update registration set status='cancelled', rejected=1, decision_note=?, decided_by=?, decided_at=?, updated_at=? where community_id=? and id=?").run(reason.slice(0, 300), by, now.toISOString(), now.toISOString(), cid, id)
+  audit(cid, by, 'registration.rejected', reg.ref, { reason })
+  queueDecisionEmail(reg, 'Your registration was not approved', `Reference ${reg.ref} was not approved.${reason ? ` Reason: ${reason}.` : ''} Please contact the organisers if you think this is a mistake.`)
+  return true
+}
+
+/** Registrations waiting for a decision, with their people, for the review queue. */
+export function pendingRegistrations(cid: number, eventId: number) {
+  return all<RegistrationRow>("select * from registration where community_id = ? and event_id = ? and status = 'pending' order by created_at", cid, eventId)
+    .map((r) => ({ reg: r, people: listParticipantsOfRegistration(cid, r.id) }))
 }
 
 // ---------- tickets, check-in and walk-ins ----------
@@ -225,19 +272,25 @@ export function findRegistrations(cid: number, eventId: number, q: string): Regi
   if (q.trim().length < 2) return []
   return all<RegistrationRow>(
     `select distinct r.* from registration r left join participant p on p.registration_id = r.id and p.community_id = r.community_id
-     where r.community_id = ? and r.event_id = ? and r.status != 'cancelled'
+     where r.community_id = ? and r.event_id = ?
        and (r.ref like ? or r.registrant_name like ? or r.registrant_mobile like ? or p.name like ? or p.mobile like ?)
      order by r.created_at desc limit 20`, cid, eventId, like, like, like, like, like)
 }
 
-export type CheckInResult = { admitted: number[]; already: { id: number; at: string; by: string }[] }
+export type CheckInResult = { admitted: number[]; already: { id: number; at: string; by: string }[]; blocked: { id: number; reason: string }[] }
 /** Idempotent: a second scan never re-admits anyone, it reports who is already in (C1, C2 without photos). */
 export function checkIn(cid: number, ids: number[], by: string, gate: string, now = new Date()): CheckInResult {
-  const out: CheckInResult = { admitted: [], already: [] }
+  const out: CheckInResult = { admitted: [], already: [], blocked: [] }
   const d = db()
   d.exec('begin')
   try {
     for (const id of ids) {
+      const info = one<RegistrationRow & { config: string }>(
+        `select r.*, e.config from participant p join registration r on r.id = p.registration_id and r.community_id = p.community_id
+         join event e on e.id = p.event_id where p.community_id = ? and p.id = ?`, cid, id)
+      if (!info) continue
+      const ts = ticketStatus(info, eventSettings(info.config).approvalRequired)
+      if (!ts.valid) { out.blocked.push({ id, reason: ts.reason }); continue }
       const r = d.prepare("update participant set checked_in_at = ?, checked_in_by = ?, checked_in_gate = ? where community_id = ? and id = ? and checked_in_at is null")
         .run(now.toISOString(), by, gate, cid, id)
       if (r.changes) out.admitted.push(id)
@@ -318,14 +371,14 @@ export function sportRoster(cid: number, eventId: number, sport: string): Roster
 }
 
 // ---------- admin workspace ----------
-export type Row = ParticipantRow & { reg_ref: string; reg_status: RegistrationRow['status']; registrant_name: string; registrant_mobile: string; emergency_name: string; emergency_mobile: string; waiver_at: string; reg_created: string; sportList: string[]; waitlistList: string[] }
+export type Row = ParticipantRow & { reg_state: RegState; reg_rejected: number; reg_note: string; reg_ref: string; reg_status: RegistrationRow['status']; registrant_name: string; registrant_mobile: string; emergency_name: string; emergency_mobile: string; waiver_at: string; reg_created: string; sportList: string[]; waitlistList: string[] }
 
 export function listRows(cid: number, eventId: number): Row[] {
-  return all<Omit<Row, 'sportList' | 'waitlistList'>>(
-    `select p.*, r.ref reg_ref, r.status reg_status, r.registrant_name, r.registrant_mobile, r.emergency_name, r.emergency_mobile, r.waiver_at, r.created_at reg_created
+  return all<Omit<Row, 'sportList' | 'waitlistList' | 'reg_state'>>(
+    `select p.*, r.ref reg_ref, r.status reg_status, r.rejected reg_rejected, r.decision_note reg_note, r.registrant_name, r.registrant_mobile, r.emergency_name, r.emergency_mobile, r.waiver_at, r.created_at reg_created
      from participant p join registration r on r.id = p.registration_id and r.community_id = p.community_id
      where p.community_id = ? and p.event_id = ? order by p.registered_at, p.id`, cid, eventId,
-  ).map((r) => ({ ...r, sportList: JSON.parse(r.sports) as string[], waitlistList: JSON.parse(r.waitlist) as string[] }))
+  ).map((r) => ({ ...r, reg_state: regState({ status: r.reg_status, rejected: r.reg_rejected }), sportList: JSON.parse(r.sports) as string[], waitlistList: JSON.parse(r.waitlist) as string[] }))
 }
 
 export type Filters = { arrived?: string; source?: string; q?: string; sport?: string; gender?: string; kind?: string; diet?: string; status?: string; verified?: string; minAge?: string; maxAge?: string; sort?: string; dir?: string }
@@ -334,7 +387,7 @@ export function filterRows(rows: Row[], f: Filters): Row[] {
   let out = rows.filter((r) =>
     (!q || [r.name, r.mobile, r.reg_ref, r.registrant_name, r.email].some((x) => x.toLowerCase().includes(q))) &&
     (!f.sport || r.sportList.includes(f.sport)) && (!f.gender || r.gender === f.gender) && (!f.kind || r.kind === f.kind) &&
-    (!f.diet || r.diet === f.diet) && (!f.status || r.reg_status === f.status) &&
+    (!f.diet || r.diet === f.diet) && (!f.status || r.reg_state === f.status) &&
     (!f.verified || String(r.verified) === (f.verified === 'yes' ? '1' : '0')) &&
     (!f.arrived || (f.arrived === 'yes') === !!r.checked_in_at) && (!f.source || r.source === f.source) &&
     (!f.minAge || r.age >= Number(f.minAge)) && (!f.maxAge || r.age <= Number(f.maxAge)),
@@ -366,8 +419,8 @@ export function adminEditParticipant(cid: number, id: number, field: EditableFie
   return { ok: true as const }
 }
 
-export type BulkAction = 'verify' | 'unverify' | 'confirm' | 'cancel' | 'member' | 'guest' | 'promote'
-export function bulkAction(cid: number, ids: number[], action: BulkAction, actor: string) {
+export type BulkAction = 'verify' | 'unverify' | 'confirm' | 'reject' | 'cancel' | 'member' | 'guest' | 'promote'
+export function bulkAction(cid: number, ids: number[], action: BulkAction, actor: string, note = '') {
   if (!ids.length) return 0
   const d = db()
   const ph = ids.map(() => '?').join(',')
@@ -380,8 +433,15 @@ export function bulkAction(cid: number, ids: number[], action: BulkAction, actor
     else if (action === 'member' || action === 'guest')
       d.prepare(`update participant set kind = ? where community_id = ? and id in (${ph})`).run(action, cid, ...ids)
     else {
-      const status = action === 'confirm' ? 'confirmed' : 'cancelled'
-      d.prepare(`update registration set status = ? where community_id = ? and id in (select registration_id from participant where community_id = ? and id in (${ph}))`).run(status, cid, cid, ...ids)
+      const regs = all<{ registration_id: number }>(`select distinct registration_id from participant where community_id = ? and id in (${ph})`, cid, ...ids)
+      for (const { registration_id } of regs) {
+        if (action === 'confirm') approveRegistration(cid, registration_id, actor, note)
+        else if (action === 'reject') rejectRegistration(cid, registration_id, actor, note)
+        else {
+          const reg = getRegistrationById(cid, registration_id)
+          if (reg) { d.prepare("update registration set status='cancelled', rejected=0, decided_by=?, decided_at=? where community_id=? and id=?").run(actor, new Date().toISOString(), cid, registration_id); audit(cid, actor, 'registration.cancelled', reg.ref) }
+        }
+      }
     }
     audit(cid, actor, `bulk.${action}`, null, { ids })
     d.exec('commit')

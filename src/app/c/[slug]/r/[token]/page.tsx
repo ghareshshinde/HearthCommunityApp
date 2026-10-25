@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
-import { getEvent, getRegistrationByToken, isOpen, listParticipantsOfRegistration, seatsLeft } from '@/lib/repo'
+import { getEvent, getRegistrationByToken, isOpen, listParticipantsOfRegistration, seatsLeft, ticketStatus } from '@/lib/repo'
 import { columnConfig, eventSettings } from '@/lib/registration/rules'
 import { cancelOwnRegistration, editRegistration } from '@/app/actions'
 import RegistrationForm from '@/components/RegistrationForm'
@@ -21,6 +21,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
   const people = listParticipantsOfRegistration(c.id, reg.id)
   const editable = reg.status !== 'cancelled' && isOpen(ev)
   const settings = eventSettings(ev.config)
+  const ts = ticketStatus(reg, settings.approvalRequired)
   const waitlisted = people.filter((p) => (JSON.parse(p.waitlist) as string[]).length)
   return (
     <>
@@ -33,10 +34,12 @@ export default async function MyRegistration({ params, searchParams }: { params:
             Some sports are full, so these people are on the waitlist: {waitlisted.map((p) => `${p.name} (${(JSON.parse(p.waitlist) as string[]).join(', ')})`).join('; ')}. The organisers will contact you if a place opens.
           </p>
         )}
-        <p>Reference <strong>{reg.ref}</strong> · <span className="tag">{reg.status}</span> · registered {formatIst(reg.created_at)}</p>
-        {reg.status !== 'cancelled' && <p><a className="btn" href={`/c/${slug}/t/${makeTicket(reg.id)}`}>Show my QR ticket</a></p>}
+        <p>Reference <strong>{reg.ref}</strong> · <span className="tag">{ts.state}</span> · registered {formatIst(reg.created_at)}</p>
+        {ts.valid && <p><a className="btn" href={`/c/${slug}/t/${makeTicket(reg.id)}`}>Show my QR ticket</a></p>}
         <p><a href={googleCalendarUrl(ev)} target="_blank" rel="noreferrer">Add to Google Calendar</a> · <a href={`/c/${slug}/e/${ev.id}/calendar.ics`}>Download .ics</a></p>
-        {reg.status === 'cancelled' && <p className="warn">This registration is cancelled.</p>}
+        {ts.state === 'rejected' && <p className="warn" role="alert"><strong>Your registration was not approved.</strong> {reg.decision_note ? `Reason: ${reg.decision_note}. ` : ''}Your QR ticket no longer works. Please contact the organisers if you think this is a mistake.</p>}
+        {ts.state === 'cancelled' && <p className="warn">This registration is cancelled and its QR ticket no longer works.</p>}
+        {ts.state === 'pending' && <p className="card" role="status">Waiting for the organisers to approve your registration. You can still edit it until the cut-off.</p>}
         {editable ? (
           <>
             <RegistrationForm

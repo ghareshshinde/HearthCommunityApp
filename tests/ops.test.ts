@@ -180,3 +180,94 @@ describe('sport roster', () => {
     expect(repo.sportRoster(kitty.id, ev.id, 'Chess')).toHaveLength(0)
   })
 })
+
+describe('approval, rejection and dead QR codes', () => {
+  const needApproval = () => ({ ...ev, config: JSON.stringify({ approvalRequired: true }) })
+
+  it('rejecting turns the QR off, records who and why, and tells the registrant', () => {
+    const made = repo.createRegistration(ev, { ...contact, registrantEmail: 'asha@example.test' }, [person(), person({ name: 'Raj Shah' })])
+    if (!made.ok) throw new Error('setup')
+    const reg = repo.getRegistrationByToken(made.token)!
+    expect(repo.ticketStatus(reg, false).valid).toBe(true) // pending tickets work unless approval is required
+    expect(repo.rejectRegistration(jsg.id, reg.id, 'admin', 'Not a member')).toBe(true)
+    const after = repo.getRegistrationById(jsg.id, reg.id)!
+    const ts = repo.ticketStatus(after, false)
+    expect(ts).toMatchObject({ valid: false, state: 'rejected' })
+    expect(ts.reason).toContain('Not a member')
+    expect(repo.listOutbox(jsg.id)[0]).toMatchObject({ subject: 'Your registration was not approved' })
+    expect(repo.listAudit(jsg.id).map((a) => a.action)).toContain('registration.rejected')
+  })
+
+  it('a dead ticket cannot admit anyone, and nobody is admitted by a stale tick', () => {
+    const reg = register(['Asha Shah'])
+    const [p] = repo.listParticipantsOfRegistration(jsg.id, reg.id)
+    repo.rejectRegistration(jsg.id, reg.id, 'admin', 'duplicate')
+    const r = repo.checkIn(jsg.id, [p.id], 'V', 'g')
+    expect(r.admitted).toHaveLength(0)
+    expect(r.blocked[0].reason).toContain('Rejected')
+    expect(repo.listRows(jsg.id, ev.id)[0].checked_in_at).toBeNull()
+  })
+
+  it('cancelling by the registrant kills the QR too, and says who cancelled', () => {
+    const reg = register(['Asha Shah'])
+    repo.cancelRegistration(ev, reg, 'public')
+    expect(repo.ticketStatus(repo.getRegistrationById(jsg.id, reg.id)!, false)).toMatchObject({ valid: false, state: 'cancelled', reason: 'Cancelled by the registrant' })
+    const reg2 = register(['Raj Shah'])
+    repo.cancelRegistration(ev, reg2, 'admin')
+    expect(repo.ticketStatus(repo.getRegistrationById(jsg.id, reg2.id)!, false).reason).toBe('Cancelled by the organisers')
+  })
+
+  it('seats are freed on rejection and an admin can reinstate, which turns the QR back on', () => {
+    const e = { ...ev, config: JSON.stringify({ capacity: { Chess: 1 } }) }
+    const r1 = repo.createRegistration(e, contact, [person({ name: 'First One' })])
+    if (!r1.ok) throw new Error('setup')
+    const reg1 = repo.getRegistrationByToken(r1.token)!
+    expect(repo.seatsLeft(e).Chess).toBe(0)
+    repo.rejectRegistration(jsg.id, reg1.id, 'admin', 'no')
+    expect(repo.seatsLeft(e).Chess).toBe(1)
+    expect(repo.approveRegistration(jsg.id, reg1.id, 'admin')).toBe(true)
+    const back = repo.getRegistrationById(jsg.id, reg1.id)!
+    expect(repo.ticketStatus(back, true)).toMatchObject({ valid: true, state: 'approved' })
+    expect(repo.listAudit(jsg.id).map((a) => a.action)).toContain('registration.reinstated')
+  })
+
+  it('when approval is required, pending tickets are blocked until approved', () => {
+    const reg = register(['Asha Shah'])
+    const [p] = repo.listParticipantsOfRegistration(jsg.id, reg.id)
+    expect(repo.ticketStatus(reg, true)).toMatchObject({ valid: false, state: 'pending' })
+    // The gate reads the setting from the event itself.
+    repo.saveEvent(jsg.id, ev.id, needApproval())
+    expect(repo.checkIn(jsg.id, [p.id], 'V', 'g').blocked).toHaveLength(1)
+    repo.approveRegistration(jsg.id, reg.id, 'admin')
+    expect(repo.checkIn(jsg.id, [p.id], 'V', 'g').admitted).toEqual([p.id])
+  })
+
+  it('the review queue lists only pending registrations, and bulk approve or reject act per registration', () => {
+    const a = register(['Asha Shah'])
+    const b = register(['Raj Shah'])
+    const c = register(['Mira Shah'])
+    const ids = repo.listRows(jsg.id, ev.id).map((r) => r.id)
+    repo.bulkAction(jsg.id, [ids[0]], 'confirm', 'admin')
+    repo.bulkAction(jsg.id, [ids[1]], 'reject', 'admin', 'Not eligible')
+    expect(repo.pendingRegistrations(jsg.id, ev.id).map((q) => q.reg.id)).toEqual([c.id])
+    const rows = repo.listRows(jsg.id, ev.id)
+    expect(rows.map((r) => r.reg_state)).toEqual(['approved', 'rejected', 'pending'])
+    expect(repo.filterRows(rows, { status: 'rejected' }).map((r) => r.registration_id)).toEqual([b.id])
+    expect(repo.stats(rows).participants).toBe(2) // rejected people no longer count
+    void a
+  })
+
+  it('another community cannot approve or reject this one\'s registrations', () => {
+    const reg = register(['Asha Shah'])
+    expect(repo.approveRegistration(kitty.id, reg.id, 'intruder')).toBe(false)
+    expect(repo.rejectRegistration(kitty.id, reg.id, 'intruder', 'x')).toBe(false)
+    expect(repo.getRegistrationById(jsg.id, reg.id)!.status).toBe('pending')
+  })
+
+  it('a rejected registrant cannot edit the registration', () => {
+    const reg = register(['Asha Shah'])
+    repo.rejectRegistration(jsg.id, reg.id, 'admin', 'no')
+    const after = repo.getRegistrationById(jsg.id, reg.id)!
+    expect(repo.updateRegistration(ev, after, contact, [person()]).ok).toBe(false)
+  })
+})

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { currentEvent, findRegistrations, getRegistrationById, listParticipantsOfRegistration, stats, listRows } from '@/lib/repo'
+import { currentEvent, findRegistrations, getRegistrationById, listParticipantsOfRegistration, stats, listRows, ticketStatus, regState } from '@/lib/repo'
 import { canCheckIn, gateCookieName, requireActor } from '@/lib/session'
 import { parseTicket } from '@/lib/ticket'
 import { eventSettings } from '@/lib/registration/rules'
@@ -13,7 +13,7 @@ import QrScanner from '@/components/QrScanner'
 import WalkInForm from '@/components/WalkInForm'
 import Pic from '@/components/Pic'
 
-export default async function Gate({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ t?: string; q?: string; done?: string }> }) {
+export default async function Gate({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ t?: string; q?: string; done?: string; blocked?: string }> }) {
   const { slug } = await params
   const sp = await searchParams
   const { c } = await requireActor(slug, canCheckIn)
@@ -29,6 +29,7 @@ export default async function Gate({ params, searchParams }: { params: Promise<{
   const results = sp.q ? findRegistrations(c.id, ev.id, sp.q) : []
   const people = reg ? listParticipantsOfRegistration(c.id, reg.id) : []
   const waiting = people.filter((p) => !p.checked_in_at)
+  const ts = reg ? ticketStatus(reg, settings.approvalRequired) : null
 
   return (
     <main style={{ maxWidth: '40rem' }}>
@@ -47,17 +48,27 @@ export default async function Gate({ params, searchParams }: { params: Promise<{
         </form>
       </div>
 
+      {sp.blocked && <p className="warn" role="alert">Nobody was admitted: this ticket is not valid.</p>}
       {sp.done && <p className="card" role="status" style={{ borderColor: 'var(--color-success)' }}>Done. {sp.done} {sp.done === '1' ? 'person' : 'people'} admitted.</p>}
       {sp.t && !reg && <p className="warn" role="alert">This ticket is not valid for this event. Check the code or search by name.</p>}
 
       {results.map((r) => (
-        <p key={r.id}><Link className="card" style={{ display: 'block' }} href={`/c/${slug}/staff/gate?t=${encodeURIComponent(makeTicket(r.id))}`}><strong>{r.registrant_name}</strong> · {r.ref} <span className="muted">{r.registrant_mobile}</span></Link></p>
+        <p key={r.id}><Link className="card" style={{ display: 'block' }} href={`/c/${slug}/staff/gate?t=${encodeURIComponent(makeTicket(r.id))}`}><strong>{r.registrant_name}</strong> · {r.ref} <span className="muted">{r.registrant_mobile}</span>{regState(r) !== 'approved' && regState(r) !== 'pending' && <span className="tag" style={{ marginLeft: 8, color: 'var(--color-error)', borderColor: 'var(--color-error)' }}>{regState(r)}</span>}</Link></p>
       ))}
       {sp.q && results.length === 0 && <p className="muted">Nobody found for &ldquo;{sp.q}&rdquo;. You can register them as a walk-in below.</p>}
 
       {reg && (
         <section className="card" style={{ marginTop: '1rem' }}>
           <h2 style={{ marginTop: 0 }}>{reg.registrant_name} <span className="tag">{reg.ref}</span> {reg.source === 'spot' && <span className="tag">walk-in</span>}</h2>
+          {ts && !ts.valid && (
+            <div role="alert" style={{ margin: '.75rem 0', padding: '1rem', border: '3px solid var(--color-error)', borderRadius: 'var(--radius)', background: '#fef2f2' }}>
+              <strong style={{ color: 'var(--color-error)', fontSize: '1.15rem' }}>DO NOT ADMIT: ticket deactivated</strong>
+              <p style={{ margin: '.4rem 0 0' }}>{ts.reason}.</p>
+              <p className="muted" style={{ margin: '.4rem 0 0' }}>Send them to an admin. If they should still play, register them as a new walk-in below.</p>
+            </div>
+          )}
+          {ts && !ts.valid && people.map((p) => <div key={p.id} className="person muted" style={{ padding: '.4rem 0' }}><span>{p.name}, {p.age}{p.checked_in_at ? ' (was admitted earlier)' : ''}</span></div>)}
+          {ts?.valid && (
           <form action={checkInAction.bind(null, slug, sp.t!)}>
             {people.map((p, i) => (
               <div key={p.id} className="person" style={{ padding: '.6rem 0', borderTop: i ? '1px solid var(--color-border)' : 0, minHeight: 56 }}>
@@ -79,7 +90,8 @@ export default async function Gate({ params, searchParams }: { params: Promise<{
               ? <button className="btn" style={{ width: '100%', minHeight: 56, marginTop: '.75rem', fontSize: '1.1rem' }}>Admit selected</button>
               : <p style={{ color: 'var(--color-success)', fontWeight: 600 }}>Everyone on this ticket is already in.</p>}
           </form>
-          {settings.spot.open && <WalkInForm slug={slug} eventId={ev.id} sports={sports} registrationId={reg.id} ticket={sp.t!} title="Add someone to this family (walk-in)" />}
+          )}
+          {settings.spot.open && ts?.valid && <WalkInForm slug={slug} eventId={ev.id} sports={sports} registrationId={reg.id} ticket={sp.t!} title="Add someone to this family (walk-in)" />}
         </section>
       )}
 

@@ -30,7 +30,7 @@ export default async function Registrations({ params, searchParams }: { params: 
       <form className="fields" method="get">
         <label>Search<input name="q" defaultValue={f.q} placeholder="Name, mobile, reference" /></label>
         {opt('sport', 'Sport', sports)}{opt('gender', 'Gender', GENDERS)}{opt('kind', 'Member or guest', ['member', 'guest'])}
-        {opt('diet', 'Diet', DIETS)}{opt('status', 'Registration status', ['pending', 'confirmed', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}{opt('arrived', 'Arrived', ['yes', 'no'])}{opt('source', 'Source', ['online', 'spot'])}
+        {opt('diet', 'Diet', DIETS)}{opt('status', 'Registration status', ['pending', 'approved', 'rejected', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}{opt('arrived', 'Arrived', ['yes', 'no'])}{opt('source', 'Source', ['online', 'spot'])}
         <label>Min age<input name="minAge" defaultValue={f.minAge} inputMode="numeric" /></label>
         <label>Max age<input name="maxAge" defaultValue={f.maxAge} inputMode="numeric" /></label>
         <label>Sort by<select name="sort" defaultValue={f.sort ?? 'registered_at'}>{['registered_at', 'name', 'age', 'gender', 'kind', 'reg_ref', 'diet'].map((v) => <option key={v}>{v}</option>)}</select></label>
@@ -45,9 +45,10 @@ export default async function Registrations({ params, searchParams }: { params: 
           <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}>With selected:
             <select name="action">
               <option value="verify">Mark verified</option><option value="unverify">Clear verified</option>
-              <option value="confirm">Confirm registration</option><option value="cancel">Cancel registration</option>
+              <option value="confirm">Approve (or reinstate) registration</option><option value="reject">Reject registration (QR stops working)</option><option value="cancel">Cancel registration (QR stops working)</option>
               <option value="member">Set as member</option><option value="guest">Set as guest</option><option value="promote">Move off waitlist</option>
             </select>
+            <input name="note" placeholder="Reason or note (shown to the registrant on rejection)" aria-label="Reason" style={{ minWidth: '16rem' }} />
             <ConfirmButton message="Apply this action to all selected rows?">Apply to selected</ConfirmButton>
           </label>
         </p>
@@ -69,7 +70,7 @@ export default async function Registrations({ params, searchParams }: { params: 
                   <td><EditableCell slug={slug} id={r.id} field="tshirt" value={r.tshirt} options={['', ...TSHIRTS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="accessibility" value={r.accessibility} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="kind" value={r.kind} options={['member', 'guest']} /></td>
-                  <td>{r.verified ? 'Yes' : 'No'}</td><td>{r.checked_in_at ? formatIst(r.checked_in_at, { timeStyle: 'short' }) : ''}{r.source === 'spot' ? ' (walk-in)' : ''}</td><td><span className="tag">{r.reg_status}</span></td>
+                  <td>{r.verified ? 'Yes' : 'No'}</td><td>{r.checked_in_at ? formatIst(r.checked_in_at, { timeStyle: 'short' }) : ''}{r.source === 'spot' ? ' (walk-in)' : ''}</td><td><span className="tag">{r.reg_state}</span>{r.reg_note && <small className="muted" style={{ display: 'block' }}>{r.reg_note}</small>}</td>
                   <td>{r.registrant_name}<br />{r.registrant_mobile}</td>
                 </tr>
               ))}

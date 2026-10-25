@@ -55,9 +55,10 @@ export async function setGate(slug: string, form: FormData) {
 export async function checkInAction(slug: string, ticket: string, form: FormData) {
   const { c, a } = await gateActor(slug)
   const ids = form.getAll('ids').map(Number).filter(Number.isInteger)
-  repo.checkIn(c.id, ids, a.label, await currentGate(slug))
+  const r = repo.checkIn(c.id, ids, a.label, await currentGate(slug))
   await persist()
-  redirect(`/c/${slug}/staff/gate?t=${encodeURIComponent(ticket)}&done=${ids.length}`)
+  if (r.blocked.length && !r.admitted.length) redirect(`/c/${slug}/staff/gate?t=${encodeURIComponent(ticket)}&blocked=1`)
+  redirect(`/c/${slug}/staff/gate?t=${encodeURIComponent(ticket)}&done=${r.admitted.length}`)
 }
 
 export async function undoCheckInAction(slug: string, ticket: string, participantId: number) {
