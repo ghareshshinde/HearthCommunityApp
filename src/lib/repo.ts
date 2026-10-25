@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
-import { columnConfig, eventSettings, validateRow, contactSchema, submissionShape, type ParticipantInput } from './registration/rules'
+import { columnConfig, eventSettings, validateRow, contactSchema, contactSchemaFor, submissionShape, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
 import { makeTicket } from './ticket'
 
@@ -113,7 +113,7 @@ export function validateSubmission(ev: EventRow, rawContact: unknown, rawRows: u
   const cols = columnConfig(ev.config)
   const ages = eventSettings(ev.config).ages
   const sports = JSON.parse(ev.sports) as string[]
-  const c = contactSchema.safeParse(contact)
+  const c = contactSchemaFor(eventSettings(ev.config).contactEmailRequired).safeParse(contact)
   const contactErrors: Record<string, string> = {}
   if (!c.success) for (const i of c.error.issues) contactErrors[String(i.path[0])] = i.message
   const rowErrors: Record<number, Record<string, string>> = {}

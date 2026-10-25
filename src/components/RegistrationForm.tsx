@@ -8,6 +8,7 @@ import {
 import type { Contact, SubmitResult } from '@/lib/repo'
 import Pic from '@/components/Pic'
 import { sportIcon } from '@/lib/sports'
+import { suggestEmail } from '@/lib/registration/rules'
 
 type Props = {
   slug: string
@@ -16,6 +17,7 @@ type Props = {
   columns: ColumnConfig
   ages?: Record<string, { min?: number; max?: number }>
   waiver: string
+  emailRequired?: boolean
   seatsLeft: Record<string, number | null>
   initialRows?: ParticipantInput[]
   initialContact?: Partial<Contact>
@@ -27,7 +29,7 @@ type Props = {
 const DRAFT_DAYS = 7
 const NO_AGES = {}
 
-export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, waiver, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
+export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, waiver, emailRequired = true, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
   const router = useRouter()
   const [rows, setRows] = useState<ParticipantInput[]>(initialRows?.length ? initialRows : [blankRow()])
   const [contact, setContact] = useState<Contact>({ registrantName: '', registrantMobile: '', registrantEmail: '', emergencyName: '', emergencyMobile: '', waiver: false, ...initialContact })
@@ -114,6 +116,9 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
       tableRef.current?.querySelector(`[data-row="${bad}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       return
     }
+    const mailErr = emailRequired && !contact.registrantEmail.trim() ? 'Email is required: your ticket link is sent here'
+      : contact.registrantEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact.registrantEmail.trim()) ? 'Enter a valid email address' : ''
+    if (mailErr) { setContactErrors({ registrantEmail: mailErr }); document.querySelector('[name="registrantEmail"]')?.scrollIntoView({ block: 'center' }); return }
     if (!contact.waiver) { setContactErrors({ waiver: 'You must accept the waiver' }); return }
     setBusy(true)
     const res = await submit({ ...contact, submissionKey }, rows)
@@ -155,7 +160,10 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
         <div className="fields">
           <label>Your name<input value={contact.registrantName} onChange={(e) => setContact({ ...contact, registrantName: e.target.value })} />{contactErrors.registrantName && <small role="alert" className="cellerr">{contactErrors.registrantName}</small>}</label>
           <label>Your mobile<input inputMode="tel" value={contact.registrantMobile} onChange={(e) => setContact({ ...contact, registrantMobile: e.target.value })} />{contactErrors.registrantMobile && <small role="alert" className="cellerr">{contactErrors.registrantMobile}</small>}</label>
-          <label>Your email<input type="email" value={contact.registrantEmail} onChange={(e) => setContact({ ...contact, registrantEmail: e.target.value })} />{contactErrors.registrantEmail && <small role="alert" className="cellerr">{contactErrors.registrantEmail}</small>}</label>
+          <label>Your email{emailRequired ? '' : ' (optional)'}<input name="registrantEmail" type="email" autoComplete="email" inputMode="email" required={emailRequired} value={contact.registrantEmail} onChange={(e) => setContact({ ...contact, registrantEmail: e.target.value })} />
+            <small className="muted">{emailRequired ? 'We email your ticket link here. Please type it carefully.' : 'We email your ticket link here if you give one.'}</small>
+            {suggestEmail(contact.registrantEmail) && <small role="status" className="wl">Did you mean <button type="button" className="linklike" onClick={() => setContact({ ...contact, registrantEmail: suggestEmail(contact.registrantEmail)! })}>{suggestEmail(contact.registrantEmail)}</button>?</small>}
+            {contactErrors.registrantEmail && <small role="alert" className="cellerr">{contactErrors.registrantEmail}</small>}</label>
           <label>Emergency contact name<input value={contact.emergencyName} onChange={(e) => setContact({ ...contact, emergencyName: e.target.value })} />{contactErrors.emergencyName && <small role="alert" className="cellerr">{contactErrors.emergencyName}</small>}</label>
           <label>Emergency contact mobile<input inputMode="tel" value={contact.emergencyMobile} onChange={(e) => setContact({ ...contact, emergencyMobile: e.target.value })} />{contactErrors.emergencyMobile && <small role="alert" className="cellerr">{contactErrors.emergencyMobile}</small>}</label>
         </div>

@@ -38,6 +38,8 @@ Every registration is re-validated on the server (the browser check is only a co
 3. Same page, "Email me my links": when email is switched on (`SMTP_URL`), links for every registration made with that address are emailed. The page answers the same way whether or not the address is known.
 4. At the venue: `/c/<slug>/venue` is a printable poster with a QR to the page above and a QR to register. Gate volunteers can also find anyone by name, mobile or reference.
 
+The registrant's email is required by default (event setting "The registrant's email is required", on unless an admin switches it off), because the emailed link is how a family gets back to its registration. The form flags mistyped domains such as `gmial.com` with a one-tap fix. The spot desk does not need an email.
+
 ## Event day
 Registrants get a QR ticket (`/c/<slug>/t/<code>`, works offline once opened). Admin > Staff and check-in creates the standard set of logins (2 per sport, 2 common sports admins, 2 gate volunteers) with expiring invite links and passwords shown once, and sets gate names and the spot desk (open/closed, walk-in limit). Gate volunteers scan the QR with the phone camera or search by name, mobile or reference, tick who is present and admit; walk-ins are added to a family or as a separate entry. Admin > Approve (also from each event on the dashboard) lists registrations waiting for a decision: approve, or reject with a reason. Rejecting or cancelling turns the QR off and frees the seats; reinstating turns it back on; an event setting can make tickets work only after approval. Sport admins see a live roster of their sport (arrivals update every 5 seconds, no contact details).
 

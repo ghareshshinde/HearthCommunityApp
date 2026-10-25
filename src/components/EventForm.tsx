@@ -43,6 +43,7 @@ export default function EventForm({ slug, ev }: { slug: string; ev?: EventRow })
           </tbody>
         </table>
       </fieldset>
+      <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="contactEmailRequired" defaultChecked={settings.contactEmailRequired} />The registrant&apos;s email is required (their ticket link is sent there)</label>
       <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="approvalRequired" defaultChecked={settings.approvalRequired} />QR tickets work only after an admin approves the registration</label>
       <label>Waiver wording<textarea name="waiver" rows={3} defaultValue={settings.waiver} /></label>
       <fieldset><legend>Form columns</legend>

@@ -45,7 +45,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
         {editable ? (
           <>
             <RegistrationForm
-              slug={slug} eventId={ev.id} sports={JSON.parse(ev.sports)} columns={columnConfig(ev.config)} ages={settings.ages} waiver={settings.waiver}
+              slug={slug} eventId={ev.id} sports={JSON.parse(ev.sports)} columns={columnConfig(ev.config)} ages={settings.ages} waiver={settings.waiver} emailRequired={settings.contactEmailRequired}
               seatsLeft={seatsLeft(ev)} draftKey={`edit-${reg.id}`}
               initialRows={people.map((p) => ({ name: p.name, age: String(p.age), gender: p.gender, mobile: p.mobile, email: p.email, sports: JSON.parse(p.sports), skill: p.skill, diet: p.diet, tshirt: p.tshirt, accessibility: p.accessibility, kind: p.kind }))}
               initialContact={{ registrantName: reg.registrant_name, registrantMobile: reg.registrant_mobile, registrantEmail: reg.registrant_email, emergencyName: reg.emergency_name, emergencyMobile: reg.emergency_mobile, waiver: true }}

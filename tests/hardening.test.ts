@@ -22,7 +22,7 @@ import { resetDbForTests } from '@/lib/db'
 import * as repo from '@/lib/repo'
 import { sendQueued } from '@/lib/mail'
 import { allow } from '@/lib/ratelimit'
-import { blankRow, normalizeMobile } from '@/lib/registration/rules'
+import { blankRow, normalizeMobile, suggestEmail, eventSettings } from '@/lib/registration/rules'
 
 const good = { ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '9876543210', sports: ['Chess'], skill: 'casual' }
 const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Raj', emergencyMobile: '9123456780', waiver: true as const }
@@ -137,7 +137,8 @@ describe('email', () => {
   })
   it('registrants without an email get no mail, but the community copy still goes out', () => {
     process.env.NOTIFY_COPY_TO = 'a@x.test, b@x.test'
-    repo.createRegistration(ev, { ...contact, registrantEmail: '' }, [good])
+    const optional = { ...ev, config: JSON.stringify({ contactEmailRequired: false }) }
+    repo.createRegistration(optional, { ...contact, registrantEmail: '' }, [good])
     expect(repo.listOutbox(jsg.id).map((m) => m.to_email).sort()).toEqual(['a@x.test', 'b@x.test'])
   })
 })
@@ -178,5 +179,49 @@ describe('email me my links', () => {
     repo.createRegistration(ev, contact, [good])
     const kitty = repo.getCommunityBySlug('kitty-demo')!
     expect(repo.queueLinksEmail(kitty.id, 'asha@example.test')).toBe(0)
+  })
+})
+
+describe('registrant email is required by default', () => {
+  const off = () => ({ ...ev, config: JSON.stringify({ contactEmailRequired: false }) })
+  it('refuses a registration without an email, with a clear message, and stores nothing', () => {
+    const r = repo.createRegistration(ev, { ...contact, registrantEmail: '' }, [good])
+    expect(r).toMatchObject({ ok: false, contactErrors: { registrantEmail: expect.stringContaining('required') } })
+    expect(repo.listRows(jsg.id, ev.id)).toHaveLength(0)
+  })
+  it('refuses spaces and badly formed addresses', () => {
+    for (const bad of ['   ', 'asha', 'asha@', '@example.test', 'asha@example', 'a b@example.test']) {
+      expect(repo.createRegistration(ev, { ...contact, registrantEmail: bad }, [good]).ok).toBe(false)
+    }
+  })
+  it('accepts a good address, trimmed', () => {
+    expect(repo.createRegistration(ev, { ...contact, registrantEmail: '  asha@example.test ' }, [good]).ok).toBe(true)
+    expect(repo.listOutbox(jsg.id)[0].to_email).toBe('asha@example.test')
+  })
+  it('an admin can switch it off for an event', () => {
+    expect(eventSettings(off().config).contactEmailRequired).toBe(false)
+    expect(eventSettings(ev.config).contactEmailRequired).toBe(true)
+    expect(repo.createRegistration(off(), { ...contact, registrantEmail: '' }, [good]).ok).toBe(true)
+    expect(repo.createRegistration(off(), { ...contact, registrantEmail: 'not-an-email', submissionKey: 'zzzzzzzz-1' }, [good]).ok).toBe(false)
+  })
+  it('editing a registration also needs an email while the setting is on', () => {
+    const r = repo.createRegistration(ev, contact, [good])
+    if (!r.ok) throw new Error('setup')
+    const reg = repo.getRegistrationByToken(r.token)!
+    expect(repo.updateRegistration(ev, reg, { ...contact, registrantEmail: '' }, [good]).ok).toBe(false)
+    expect(repo.updateRegistration(ev, reg, { ...contact, registrantEmail: 'new@example.test' }, [good]).ok).toBe(true)
+  })
+  it('the spot desk does not need an email', () => {
+    const e = { ...ev, config: JSON.stringify({ spot: { open: true, cap: 0 } }) }
+    const w = repo.addWalkIn(e, { person: good, waiver: true, by: 'D', gate: 'g', contact: { name: 'Walk In', mobile: '9000000001', emergencyName: 'Em', emergencyMobile: '9000000002' } })
+    expect(w.ok).toBe(true)
+  })
+  it('suggests a fix for common mistyped domains', () => {
+    expect(suggestEmail('asha@gmial.com')).toBe('asha@gmail.com')
+    expect(suggestEmail('Asha@Gmail.con')).toBe('asha@gmail.com')
+    expect(suggestEmail('asha@hotmial.com')).toBe('asha@hotmail.com')
+    expect(suggestEmail('asha@gmail.com')).toBeNull()
+    expect(suggestEmail('asha@mycompany.in')).toBeNull()
+    expect(suggestEmail('nonsense')).toBeNull()
   })
 })

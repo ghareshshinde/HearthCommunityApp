@@ -123,7 +123,7 @@ export async function saveEventAction(slug: string, eventId: number | null, form
   const id = repo.saveEvent(c.id, eventId, {
     title, description: String(form.get('description') ?? ''), venue: String(form.get('venue') ?? ''), map_url: String(form.get('map_url') ?? ''),
     starts_at: istInputToIso(String(form.get('starts_at') ?? '')), ends_at: istInputToIso(String(form.get('ends_at') ?? '')),
-    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ ...existing, columns: cols, capacity, ages, waiver, approvalRequired: form.get('approvalRequired') === 'on' }),
+    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ ...existing, columns: cols, capacity, ages, waiver, approvalRequired: form.get('approvalRequired') === 'on', contactEmailRequired: form.get('contactEmailRequired') === 'on' }),
     status: (['draft', 'published', 'closed'].includes(String(form.get('status'))) ? String(form.get('status')) : 'draft') as 'draft',
   })
   repo.audit(c.id, 'admin', eventId ? 'event.updated' : 'event.created', String(id), { title })

@@ -34,7 +34,7 @@ const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -51,7 +51,8 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
   }
   const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
   const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
-  return { approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  // Required unless an admin switches it off: the emailed link is how a family gets back to its registration.
+  return { contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
@@ -133,14 +134,32 @@ export const submissionShape = z.object({
   }),
 })
 
-export const contactSchema = z.object({
+const contactFields = {
   registrantName: englishName(80),
   registrantMobile: mobile,
-  registrantEmail: z.union([z.literal(''), z.email()]),
   emergencyName: englishName(80),
   emergencyMobile: mobile,
   waiver: z.literal(true, { error: 'You must accept the waiver' }),
-})
+}
+const optionalEmail = z.union([z.literal(''), z.email('Enter a valid email address')])
+const requiredEmail = z.email('Enter a valid email address').min(1, 'Required')
+
+/** Registrant details. `emailRequired` follows the event setting; the spot desk uses the optional form. */
+export const contactSchemaFor = (emailRequired: boolean) =>
+  z.object({ ...contactFields, registrantEmail: emailRequired ? z.string().trim().min(1, 'Email is required: your ticket link is sent here').pipe(requiredEmail) : optionalEmail })
+export const contactSchema = contactSchemaFor(false)
+
+const DOMAIN_TYPOS: Record<string, string> = {
+  'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gamil.com': 'gmail.com', 'gnail.com': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.co': 'gmail.com', 'gmaill.com': 'gmail.com',
+  'yahho.com': 'yahoo.com', 'yaho.com': 'yahoo.com', 'yahoo.con': 'yahoo.com', 'hotmial.com': 'hotmail.com', 'hotmal.com': 'hotmail.com', 'outlok.com': 'outlook.com', 'outlook.con': 'outlook.com',
+}
+/** A likely correction for a mistyped email domain (name@gmial.com becomes name@gmail.com), or null. */
+export function suggestEmail(email: string): string | null {
+  const m = /^([^@\s]+)@([^@\s]+)$/.exec(email.trim().toLowerCase())
+  if (!m) return null
+  const fix = DOMAIN_TYPOS[m[2]]
+  return fix ? `${m[1]}@${fix}` : null
+}
 
 /** Pasted block from Excel/Sheets: tab-separated, columns in grid order. */
 export const PASTE_COLUMNS = ['name', 'age', 'gender', 'mobile', 'email', 'sports', 'skill', 'diet', 'tshirt', 'accessibility', 'kind'] as const
