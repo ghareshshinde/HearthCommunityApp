@@ -7,6 +7,7 @@ import { requireCommunity } from '@/lib/session'
 import { getEvent, listRows } from '@/lib/repo'
 import { listCompetitions, listMatches, podium, roundName, standings, listEntries, type Competition, type Match } from '@/lib/sports-ops'
 import { sportIcon } from '@/lib/sports'
+import { memo } from '@/lib/memo'
 import AutoRefresh from '@/components/AutoRefresh'
 import BoardCycle from '@/components/BoardCycle'
 
@@ -77,17 +78,20 @@ export default async function Board({ params }: { params: Promise<{ slug: string
   const c = await requireCommunity(slug)
   const ev = getEvent(c.id, Number(id))
   if (!ev || ev.status === 'draft') notFound()
-  const comps = listCompetitions(c.id, ev.id).filter((k) => k.drawn)
-  const data = comps.map((k) => ({ k, ms: listMatches(c.id, k.id), pod: podium(c.id, k.id), entries: listEntries(c.id, k.id) }))
-  const shownData = data.filter((d) => d.k.published_rounds > 0 || d.pod.complete)
-  const all = data.flatMap((d) => d.ms.filter((m) => !m.bye && (d.k.published_rounds >= m.round || d.pod.complete)).map((m) => ({ d, m })))
-  const live = all.filter((x) => x.m.status === 'live')
-  const next = all.filter((x) => x.m.status !== 'done' && x.m.status !== 'live' && x.m.a_entry && x.m.b_entry)
-    .sort((a, b) => (a.m.scheduled_at || '~').localeCompare(b.m.scheduled_at || '~') || a.m.round - b.m.round).slice(0, 4)
-  const rows = listRows(c.id, ev.id)
-  const arrived = rows.filter((r) => r.checked_in_at && r.reg_status !== 'cancelled').length
-  const total = data.flatMap((d) => d.ms.filter((m) => !m.bye)).length
-  const done = data.flatMap((d) => d.ms.filter((m) => !m.bye && m.status === 'done')).length
+  const { data, shownData, live, next, arrived, total, done } = memo(`board:${c.id}:${ev.id}`, 2000, () => {
+    const comps = listCompetitions(c.id, ev.id).filter((k) => k.drawn)
+    const data = comps.map((k) => ({ k, ms: listMatches(c.id, k.id), pod: podium(c.id, k.id), entries: listEntries(c.id, k.id) }))
+    const shownData = data.filter((d) => d.k.published_rounds > 0 || d.pod.complete)
+    const all = data.flatMap((d) => d.ms.filter((m) => !m.bye && (d.k.published_rounds >= m.round || d.pod.complete)).map((m) => ({ d, m })))
+    const live = all.filter((x) => x.m.status === 'live')
+    const next = all.filter((x) => x.m.status !== 'done' && x.m.status !== 'live' && x.m.a_entry && x.m.b_entry)
+      .sort((a, b) => (a.m.scheduled_at || '~').localeCompare(b.m.scheduled_at || '~') || a.m.round - b.m.round).slice(0, 4)
+    const rows = listRows(c.id, ev.id)
+    const arrived = rows.filter((r) => r.checked_in_at && r.reg_status !== 'cancelled').length
+    const total = data.flatMap((d) => d.ms.filter((m) => !m.bye)).length
+    const done = data.flatMap((d) => d.ms.filter((m) => !m.bye && m.status === 'done')).length
+    return { data, shownData, live, next, arrived, total, done }
+  })
   const h = await headers()
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000'
   const origin = `${h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')}://${host}`

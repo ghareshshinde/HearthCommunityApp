@@ -58,3 +58,7 @@ Admins and sports admins post at `/c/jsg/staff/announce`. Messages scroll along 
 ## Live board and feedback
 
 Open `/c/jsg/e/1/board` on the projector. Feedback links appear on each registration page once the event starts; admins manage it at `/c/jsg/admin/events/1/feedback`.
+
+## Load test
+
+`node scripts/loadtest.mjs http://localhost:3100 300 300` replays a real browser submission for 300 families (1,200 people) at once, each with its own connection address and key. On the development machine (one Node process, production build): 0 failures, 301 registrations and 1,201 people saved, about 2 seconds in total, and 300 simultaneous page views of the event page, results and board each answered in under 4 seconds. Re-run it against your Cloud Run URL after deploying.

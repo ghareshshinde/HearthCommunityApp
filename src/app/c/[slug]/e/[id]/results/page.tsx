@@ -4,6 +4,7 @@ import { requireCommunity } from '@/lib/session'
 import { getEvent } from '@/lib/repo'
 import { listCompetitions, listEntries, listMatches, podium, roundName, type Competition } from '@/lib/sports-ops'
 import { sportIcon } from '@/lib/sports'
+import { memo } from '@/lib/memo'
 import AutoRefresh from '@/components/AutoRefresh'
 import Pic from '@/components/Pic'
 
@@ -14,9 +15,8 @@ export default async function Results({ params, searchParams }: { params: Promis
   const c = await requireCommunity(slug)
   const ev = getEvent(c.id, Number(id))
   if (!ev || ev.status === 'draft') notFound()
-  const comps = listCompetitions(c.id, ev.id).filter((k) => k.drawn)
   const needle = q?.trim().toLowerCase()
-  const data = comps.map((k) => ({ k, pod: podium(c.id, k.id), ms: listMatches(c.id, k.id), entries: listEntries(c.id, k.id) }))
+  const data = memo(`results:${c.id}:${ev.id}`, 2000, () => listCompetitions(c.id, ev.id).filter((k) => k.drawn).map((k) => ({ k, pod: podium(c.id, k.id), ms: listMatches(c.id, k.id), entries: listEntries(c.id, k.id) })))
   const finished = data.filter((d) => d.pod.complete)
   const mine = needle && needle.length >= 2
     ? data.flatMap((d) => {

@@ -30,7 +30,7 @@ export async function submitRegistration(slug: string, eventId: number, contact:
   const ev = c && repo.getEvent(c.id, eventId)
   if (!c || !ev) return { ok: false, error: 'Event not found' }
   const ip = ((await headers()).get('x-forwarded-for') ?? 'local').split(',')[0].trim()
-  if (!allow(`reg:${ip}`, 20, 10 * 60_000)) return { ok: false, error: 'Too many registrations from this connection. Please wait a few minutes and try again.' }
+  if (!allow(`reg:${ip}`, 100, 10 * 60_000)) return { ok: false, error: 'Too many registrations from this connection. Please wait a few minutes and try again.' }
   const r = repo.createRegistration(ev, contact, rows)
   if (!r.ok) return r
   const saved = await savedOrError(r)
