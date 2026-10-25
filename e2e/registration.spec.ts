@@ -358,6 +358,10 @@ test('double-tapping submit makes one registration, and a lost link is recovered
   await submit.dblclick() // two clicks in quick succession
   await expect(page.getByText(/Registration saved/)).toBeVisible()
   const ref = (await page.getByText(/^Reference/).first().textContent())!.match(/HR-[0-9A-F]{8}/)![0]
+  // Without any email set up, the registrant can still keep the link: share it to themselves or copy it.
+  await expect(page.getByText('Keep this link safe')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Send it to myself' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('href', /wa\.me/)
 
   const admin = await (await browser.newContext()).newPage()
   await admin.goto('/c/jsg/admin/login')

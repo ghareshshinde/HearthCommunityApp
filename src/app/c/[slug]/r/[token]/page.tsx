@@ -5,6 +5,7 @@ import { columnConfig, eventSettings } from '@/lib/registration/rules'
 import { cancelOwnRegistration, editRegistration } from '@/app/actions'
 import RegistrationForm from '@/components/RegistrationForm'
 import Pic from '@/components/Pic'
+import SaveLink from '@/components/SaveLink'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { makeTicket } from '@/lib/ticket'
@@ -29,6 +30,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
       <main className="wide">
         <h1>{ev.title}</h1>
         {saved && <p className="card" role="status" style={{ borderColor: 'var(--color-success)' }}><strong style={{ color: 'var(--color-success)' }}>Registration saved.</strong> Your reference is <strong>{reg.ref}</strong>. Keep this page&apos;s link to edit or cancel. Organisers will verify members and guests and may contact you.</p>}
+        {saved && ts.state !== 'rejected' && <SaveLink reference={reg.ref} title={ev.title} />}
         {waitlisted.length > 0 && (
           <p className="warn" role="status">
             Some sports are full, so these people are on the waitlist: {waitlisted.map((p) => `${p.name} (${(JSON.parse(p.waitlist) as string[]).join(', ')})`).join('; ')}. The organisers will contact you if a place opens.
