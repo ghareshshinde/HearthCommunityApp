@@ -19,8 +19,8 @@ test('family of 4 plus 2 guests registers, admin sees and exports them', async (
     ['Raj Shah', '38', 'Male', '9123456780', '', 'Cricket, Badminton', 'competitive', 'Jain', 'L', '', 'member'],
     ['Mira Shah', '9', 'Female', '', '', 'Carrom', 'beginner', 'Jain', '8-10y', '', 'member'],
     ['Veer Shah', '7', 'Male', '', '', 'Carrom', 'beginner', 'Jain', '4-6y', '', 'member'],
-    ['આશા મહેતા', '41', 'Female', '9000000001', '', 'Chess', 'casual', 'Vegetarian', 'M', '', 'guest'],
-    ['राज मेहता', '45', 'Male', '9000000002', '', 'Table Tennis', 'casual', 'Vegetarian', 'L', '', 'guest'],
+    ['Asha Mehta', '41', 'Female', '9000000001', '', 'Chess', 'casual', 'Vegetarian', 'M', '', 'guest'],
+    ['Raj Mehta', '45', 'Male', '9000000002', '', 'Table Tennis', 'casual', 'Vegetarian', 'L', '', 'guest'],
   ].map((r) => r.join('\t')).join('\n')
   await page.locator('[data-r="0"][data-c="name"]').focus()
   await page.evaluate((text) => {
@@ -67,8 +67,8 @@ test('family of 4 plus 2 guests registers, admin sees and exports them', async (
   await wb.xlsx.readFile((await dl.path())!)
   expect(wb.worksheets.map((w) => w.name)).toContain('Table Tennis')
   const names = wb.getWorksheet('All participants')!.getColumn(6).values
-  expect(names).toContain('આશા મહેતા')
-  expect(names).toContain('राज मेहता')
+  expect(names).toContain('Asha Mehta')
+  expect(names).toContain('Raj Mehta')
 
   // Registrant can reopen via the secret link; a bad token 404s.
   await page.goto(regUrl.split('?')[0])

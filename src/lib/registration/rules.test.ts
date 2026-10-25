@@ -30,11 +30,18 @@ describe('validateRow', () => {
   })
 })
 
+describe('English-only names', () => {
+  it('rejects Gujarati and Hindi script and digits, allows common name punctuation', () => {
+    for (const bad of ['આશા શાહ', 'राज', 'Asha2', '<b>x</b>']) expect(validateRow(row({ name: bad }), DEFAULT_SPORTS, DEFAULT_COLUMNS).errors.name).toBe('Use English letters only')
+    for (const ok of ["Mary-Ann O'Neil", 'Dr. Raj K. Shah']) expect(validateRow(row({ name: ok }), DEFAULT_SPORTS, DEFAULT_COLUMNS).ok).toBe(true)
+  })
+})
+
 describe('parsePaste', () => {
-  it('turns tab-separated Excel rows into participant rows, keeping Gujarati names', () => {
-    const rows = parsePaste('આશા શાહ\t34\tfemale\t9876543210\t\tChess, carrom\tcasual\tJain\tM\t\tguest\nRaj\t9\tMale', DEFAULT_SPORTS)
+  it('turns tab-separated Excel rows into participant rows', () => {
+    const rows = parsePaste('Asha Shah\t34\tfemale\t9876543210\t\tChess, carrom\tcasual\tJain\tM\t\tguest\nRaj\t9\tMale', DEFAULT_SPORTS)
     expect(rows).toHaveLength(2)
-    expect(rows[0]).toMatchObject({ name: 'આશા શાહ', gender: 'Female', sports: ['Chess', 'Carrom'], diet: 'Jain', kind: 'guest' })
+    expect(rows[0]).toMatchObject({ name: 'Asha Shah', gender: 'Female', sports: ['Chess', 'Carrom'], diet: 'Jain', kind: 'guest' })
     expect(rows[1]).toMatchObject({ name: 'Raj', age: '9', kind: 'member', diet: 'Vegetarian' })
   })
 })

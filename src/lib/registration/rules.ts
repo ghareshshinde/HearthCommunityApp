@@ -28,6 +28,11 @@ export function columnConfig(raw: string | null | undefined): ColumnConfig {
   }
 }
 
+/** English only for the MVP: Latin letters, spaces and . ' - so every admin and coordinator can read every name. */
+export const ENGLISH_NAME = /^[A-Za-z][A-Za-z .'’-]*$/
+const englishName = (max: number) =>
+  z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
+
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
 const mobile = z.string().transform(normalizeMobile).refine((v) => /^\d{10}$/.test(v), 'Enter a 10-digit mobile number')
 
@@ -48,6 +53,7 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
   const name = row.name.trim()
   if (!name) errors.name = 'Required'
   else if (name.length > 80) errors.name = 'Too long'
+  else if (!ENGLISH_NAME.test(name)) errors.name = 'Use English letters only'
   const age = Number(row.age)
   if (row.age === '' || !Number.isInteger(age) || age < 1 || age > 99) errors.age = 'Age 1 to 99'
   if (!GENDERS.includes(row.gender as never)) errors.gender = 'Choose Male or Female'
@@ -84,10 +90,10 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
 }
 
 export const contactSchema = z.object({
-  registrantName: z.string().trim().min(1, 'Required').max(80),
+  registrantName: englishName(80),
   registrantMobile: mobile,
   registrantEmail: z.union([z.literal(''), z.email()]),
-  emergencyName: z.string().trim().min(1, 'Required').max(80),
+  emergencyName: englishName(80),
   emergencyMobile: mobile,
   waiver: z.literal(true, { error: 'You must accept the waiver' }),
 })

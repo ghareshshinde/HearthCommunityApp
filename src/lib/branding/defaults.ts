@@ -18,7 +18,7 @@ export const PLATFORM_BRANDING: Branding = {
     textPrimary: '#fafaf9', textSecondary: '#d6d3d1', border: '#57534e',
     success: '#86efac', warning: '#fcd34d', error: '#fca5a5', link: '#93c5fd',
   },
-  fonts: { heading: 'Inter', body: 'Inter', indic: 'Noto Sans Devanagari, Noto Sans Gujarati' },
+  fonts: { heading: 'Inter', body: 'Inter', indic: 'sans-serif' },
   baseSizePx: 16,
   radiusPx: 10,
   buttonStyle: 'filled',

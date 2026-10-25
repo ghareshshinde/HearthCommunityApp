@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe('registration lifecycle', () => {
   it('registers a family of 4 plus 2 guests, marked member or guest, with per-person timestamps', () => {
-    const rows = [person(), person({ name: 'Raj', gender: 'Male' }), person({ name: 'Kid', age: '9', mobile: '', sports: ['Carrom'] }), person({ name: 'Kid2', age: '7', mobile: '' }),
+    const rows = [person(), person({ name: 'Raj', gender: 'Male' }), person({ name: 'Kid', age: '9', mobile: '', sports: ['Carrom'] }), person({ name: 'Kid Two', age: '7', mobile: '' }),
       person({ name: 'Guest A', kind: 'guest' }), person({ name: 'Guest B', kind: 'guest', sports: ['Cricket', 'Badminton'] })]
     const r = repo.createRegistration(ev, contact, rows)
     expect(r.ok).toBe(true)
@@ -39,6 +39,10 @@ describe('registration lifecycle', () => {
     const r = repo.createRegistration(ev, contact, [person(), person({ name: '', sports: [] })])
     expect(r).toMatchObject({ ok: false, rowErrors: { 1: { name: 'Required', sports: 'Pick at least one sport' } } })
     expect(repo.listRows(jsg.id, ev.id)).toHaveLength(0)
+  })
+  it('refuses non-English names on the server too', () => {
+    expect(repo.createRegistration(ev, contact, [person({ name: 'આશા' })])).toMatchObject({ ok: false, rowErrors: { 0: { name: 'Use English letters only' } } })
+    expect(repo.createRegistration(ev, { ...contact, registrantName: 'आशा' }, [person()]).ok).toBe(false)
   })
   it('requires the waiver and emergency contact', () => {
     const r = repo.createRegistration(ev, { ...contact, waiver: false as unknown as true, emergencyName: '' }, [person()])
@@ -84,14 +88,14 @@ describe('admin workspace', () => {
     expect(s.verified).toBe(2)
     expect(s.pending).toBe(0)
   })
-  it('exports Excel with one tab per sport and Hindi/Gujarati names intact', async () => {
-    repo.createRegistration(ev, contact, [person({ name: 'આશા શાહ', sports: ['Chess', 'Carrom'] }), person({ name: 'राज शर्मा', gender: 'Male', sports: ['Cricket'] })])
+  it('exports Excel with one tab per sport', async () => {
+    repo.createRegistration(ev, contact, [person({ name: 'Asha Shah', sports: ['Chess', 'Carrom'] }), person({ name: 'Raj Sharma', gender: 'Male', sports: ['Cricket'] })])
     const buf = await buildWorkbook(repo.listRows(jsg.id, ev.id), JSON.parse(ev.sports))
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(buf as unknown as ArrayBuffer)
     expect(wb.worksheets.map((w) => w.name)).toEqual(['All participants', ...JSON.parse(ev.sports)])
-    expect(wb.getWorksheet('Chess')!.getRow(2).getCell(6).value).toBe('આશા શાહ')
-    expect(wb.getWorksheet('Cricket')!.getRow(2).getCell(6).value).toBe('राज शर्मा')
+    expect(wb.getWorksheet('Chess')!.getRow(2).getCell(6).value).toBe('Asha Shah')
+    expect(wb.getWorksheet('Cricket')!.getRow(2).getCell(6).value).toBe('Raj Sharma')
     expect(wb.getWorksheet('All participants')!.rowCount).toBe(3)
   })
 })
