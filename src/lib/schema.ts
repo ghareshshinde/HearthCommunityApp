@@ -173,6 +173,22 @@ create table if not exists announcement (
   removed_by text
 );
 create index if not exists announcement_live on announcement (community_id, expires_at);
+create table if not exists feedback (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  event_id integer not null,
+  registration_id integer not null,
+  overall integer not null,
+  organisation integer not null,
+  sports_rating integer not null,
+  favourite text not null default '',
+  would_return text not null default '',
+  went_well text not null default '',
+  improve text not null default '',
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  unique (event_id, registration_id)
+);
 create table if not exists audit_log (
   id integer primary key autoincrement,
   community_id integer references community(id),

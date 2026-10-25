@@ -9,6 +9,7 @@ import SaveLink from '@/components/SaveLink'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { makeTicket } from '@/lib/ticket'
+import { feedbackOpen } from '@/lib/feedback'
 
 const AVATARS = ['avatar-1', 'avatar-2', 'avatar-3', 'avatar-4']
 
@@ -37,6 +38,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
           </p>
         )}
         <p>Reference <strong>{reg.ref}</strong> · <span className="tag">{ts.state}</span> · registered {formatIst(reg.created_at)}</p>
+        {feedbackOpen(ev) && reg.status !== 'cancelled' && <p className="card"><strong>How was the event?</strong> <a className="btn gold" href={`/c/${slug}/r/${token}/feedback`}>Give feedback</a></p>}
         {ts.valid && <p><a className="btn" href={`/c/${slug}/t/${makeTicket(reg.id)}`}>Show my QR ticket</a></p>}
         <p><a href={googleCalendarUrl(ev)} target="_blank" rel="noreferrer">Add to Google Calendar</a> · <a href={`/c/${slug}/e/${ev.id}/calendar.ics`}>Download .ics</a></p>
         {ts.state === 'rejected' && <p className="warn" role="alert"><strong>Your registration was not approved.</strong> {reg.decision_note ? `Reason: ${reg.decision_note}. ` : ''}Your QR ticket no longer works. Please contact the organisers if you think this is a mistake.</p>}

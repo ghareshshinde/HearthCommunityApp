@@ -38,6 +38,7 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
               <Link className="btn" href={`/c/${slug}/admin/events/${e.id}/registrations`}>Registrations</Link>{' '}
               <Link className="btn gold" href={`/c/${slug}/admin/events/${e.id}/review`}>Approve ({s.pending})</Link>{' '}
               <Link className="btn outline" href={`/c/${slug}/admin/events/${e.id}/competitions`}>Sports and results</Link>{' '}
+              <Link className="btn outline" href={`/c/${slug}/admin/events/${e.id}/feedback`}>Feedback</Link>{' '}
               <Link href={`/c/${slug}/admin/events/${e.id}`}>Edit event</Link> · <Link href={`/c/${slug}/e/${e.id}`}>Public page</Link>
             </p>
           </section>
