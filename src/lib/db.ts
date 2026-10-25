@@ -13,10 +13,16 @@ export function getDb(): DatabaseSync {
   db = new DatabaseSync(path)
   db.exec('pragma journal_mode = wal; pragma foreign_keys = on;')
   db.exec(SCHEMA)
+  addColumn(db, 'participant', 'waitlist', "text not null default '[]'")
   return db
 }
 
 export function resetDbForTests() {
   db?.close()
   db = undefined
+}
+
+function addColumn(d: DatabaseSync, table: string, column: string, def: string) {
+  const cols = d.prepare(`pragma table_info(${table})`).all() as { name: string }[]
+  if (!cols.some((c) => c.name === column)) d.exec(`alter table ${table} add column ${column} ${def}`)
 }

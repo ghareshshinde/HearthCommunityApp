@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
-import { columnConfig, validateRow, contactSchema, type ParticipantInput } from './registration/rules'
+import { columnConfig, eventSettings, validateRow, contactSchema, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
 
 /** Every query below takes a community id and filters on it. Nothing else touches the tables. */
@@ -17,7 +17,7 @@ export type RegistrationRow = {
 export type ParticipantRow = {
   id: number; community_id: number; event_id: number; registration_id: number; name: string; age: number; gender: 'Male' | 'Female'
   mobile: string; email: string; sports: string; skill: string; diet: string; tshirt: string; accessibility: string
-  kind: 'member' | 'guest'; verified: number; registered_at: string
+  kind: 'member' | 'guest'; verified: number; registered_at: string; waitlist: string
 }
 
 const db = () => getDb()
@@ -74,7 +74,7 @@ export function saveEvent(cid: number, id: number | null, e: EventInput): number
 }
 
 // ---------- registrations ----------
-export type Contact = { registrantName: string; registrantMobile: string; registrantEmail: string; emergencyName: string; emergencyMobile: string; waiver: boolean }
+export type Contact = { website?: string; registrantName: string; registrantMobile: string; registrantEmail: string; emergencyName: string; emergencyMobile: string; waiver: boolean }
 export type SubmitResult =
   | { ok: true; token: string; ref: string }
   | { ok: false; error?: string; contactErrors?: Record<string, string>; rowErrors?: Record<number, Record<string, string>> }
@@ -86,13 +86,14 @@ export function isOpen(ev: EventRow, now = new Date()) {
 /** Validates everything again on the server (the browser check is a convenience, not a gate). */
 export function validateSubmission(ev: EventRow, contact: Contact, rows: ParticipantInput[]) {
   const cols = columnConfig(ev.config)
+  const ages = eventSettings(ev.config).ages
   const sports = JSON.parse(ev.sports) as string[]
   const c = contactSchema.safeParse(contact)
   const contactErrors: Record<string, string> = {}
   if (!c.success) for (const i of c.error.issues) contactErrors[String(i.path[0])] = i.message
   const rowErrors: Record<number, Record<string, string>> = {}
   const clean = rows.map((r, i) => {
-    const v = validateRow(r, sports, cols)
+    const v = validateRow(r, sports, cols, ages)
     if (!v.ok) rowErrors[i] = v.errors as Record<string, string>
     return v.value
   })
@@ -102,12 +103,43 @@ export function validateSubmission(ev: EventRow, contact: Contact, rows: Partici
   return { ok: true as const, contact: c.data!, rows: clean.filter((x): x is NonNullable<typeof x> => !!x) }
 }
 
-function insertParticipants(cid: number, eid: number, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[]) {
-  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,skill,diet,tshirt,accessibility,kind) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-  for (const p of rows) st.run(cid, eid, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), p.skill, p.diet, p.tshirt, p.accessibility, p.kind)
+/** Sports already taken per sport by live registrations, optionally ignoring one registration (an edit). */
+function sportUsage(cid: number, eid: number, exceptRegistration?: number) {
+  const used: Record<string, number> = {}
+  const rows = all<{ sports: string; waitlist: string }>(
+    `select p.sports, p.waitlist from participant p join registration r on r.id = p.registration_id and r.community_id = p.community_id
+     where p.community_id = ? and p.event_id = ? and r.status != 'cancelled' and r.id != ?`, cid, eid, exceptRegistration ?? 0)
+  for (const r of rows) {
+    const wl = new Set(JSON.parse(r.waitlist) as string[])
+    for (const sp of JSON.parse(r.sports) as string[]) if (!wl.has(sp)) used[sp] = (used[sp] ?? 0) + 1
+  }
+  return used
+}
+
+/** Seats left per sport (null = unlimited), for showing "waitlist" on the form before someone submits. */
+export function seatsLeft(ev: EventRow): Record<string, number | null> {
+  const cap = eventSettings(ev.config).capacity
+  const used = sportUsage(ev.community_id, ev.id)
+  return Object.fromEntries((JSON.parse(ev.sports) as string[]).map((sp) => [sp, cap[sp] ? Math.max(0, cap[sp] - (used[sp] ?? 0)) : null]))
+}
+
+/** First come, first served per sport; anyone past a sport's capacity is waitlisted for it, never refused (X4). */
+function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[]) {
+  const cap = eventSettings(ev.config).capacity
+  const used = sportUsage(ev.community_id, ev.id, rid)
+  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,diet,tshirt,accessibility,kind) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  for (const p of rows) {
+    const waitlist: string[] = []
+    for (const sp of p.sports) {
+      if (cap[sp] && (used[sp] ?? 0) >= cap[sp]) waitlist.push(sp)
+      else used[sp] = (used[sp] ?? 0) + 1
+    }
+    st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, p.diet, p.tshirt, p.accessibility, p.kind)
+  }
 }
 
 export function createRegistration(ev: EventRow, contact: Contact, rows: ParticipantInput[], now = new Date()): SubmitResult {
+  if (contact.website) return { ok: false, error: 'Could not save this registration' } // honeypot field filled in by a bot
   if (!isOpen(ev, now)) return { ok: false, error: 'Registration is closed for this event' }
   const v = validateSubmission(ev, contact, rows)
   if (!v.ok) return v
@@ -118,7 +150,7 @@ export function createRegistration(ev: EventRow, contact: Contact, rows: Partici
   try {
     const rid = Number(d.prepare('insert into registration (community_id,event_id,ref,token,registrant_name,registrant_mobile,registrant_email,emergency_name,emergency_mobile,waiver_at) values (?,?,?,?,?,?,?,?,?,?)')
       .run(ev.community_id, ev.id, ref, token, v.contact.registrantName, v.contact.registrantMobile, v.contact.registrantEmail, v.contact.emergencyName, v.contact.emergencyMobile, now.toISOString()).lastInsertRowid)
-    insertParticipants(ev.community_id, ev.id, rid, v.rows)
+    insertParticipants(ev, rid, v.rows)
     audit(ev.community_id, 'public', 'registration.created', ref, { participants: v.rows.length })
     if (v.contact.registrantEmail) queueEmail(ev.community_id, v.contact.registrantEmail, `Registration received: ${ev.title}`, `Reference ${ref}. Organisers will verify your registration. Edit link: /r/${token}`)
     d.exec('commit')
@@ -145,7 +177,7 @@ export function updateRegistration(ev: EventRow, reg: RegistrationRow, contact: 
     d.prepare('update registration set registrant_name=?,registrant_mobile=?,registrant_email=?,emergency_name=?,emergency_mobile=?,updated_at=? where community_id=? and id=?')
       .run(v.contact.registrantName, v.contact.registrantMobile, v.contact.registrantEmail, v.contact.emergencyName, v.contact.emergencyMobile, now.toISOString(), reg.community_id, reg.id)
     d.prepare('delete from participant where community_id=? and registration_id=?').run(reg.community_id, reg.id)
-    insertParticipants(reg.community_id, reg.event_id, reg.id, v.rows)
+    insertParticipants(ev, reg.id, v.rows)
     audit(reg.community_id, 'public', 'registration.edited', reg.ref, { participants: v.rows.length })
     d.exec('commit')
   } catch (e) { d.exec('rollback'); throw e }
@@ -160,14 +192,14 @@ export function cancelRegistration(ev: EventRow, reg: RegistrationRow, actor: st
 }
 
 // ---------- admin workspace ----------
-export type Row = ParticipantRow & { reg_ref: string; reg_status: RegistrationRow['status']; registrant_name: string; registrant_mobile: string; emergency_name: string; emergency_mobile: string; waiver_at: string; reg_created: string; sportList: string[] }
+export type Row = ParticipantRow & { reg_ref: string; reg_status: RegistrationRow['status']; registrant_name: string; registrant_mobile: string; emergency_name: string; emergency_mobile: string; waiver_at: string; reg_created: string; sportList: string[]; waitlistList: string[] }
 
 export function listRows(cid: number, eventId: number): Row[] {
-  return all<Omit<Row, 'sportList'>>(
+  return all<Omit<Row, 'sportList' | 'waitlistList'>>(
     `select p.*, r.ref reg_ref, r.status reg_status, r.registrant_name, r.registrant_mobile, r.emergency_name, r.emergency_mobile, r.waiver_at, r.created_at reg_created
      from participant p join registration r on r.id = p.registration_id and r.community_id = p.community_id
      where p.community_id = ? and p.event_id = ? order by p.registered_at, p.id`, cid, eventId,
-  ).map((r) => ({ ...r, sportList: JSON.parse(r.sports) as string[] }))
+  ).map((r) => ({ ...r, sportList: JSON.parse(r.sports) as string[], waitlistList: JSON.parse(r.waitlist) as string[] }))
 }
 
 export type Filters = { q?: string; sport?: string; gender?: string; kind?: string; diet?: string; status?: string; verified?: string; minAge?: string; maxAge?: string; sort?: string; dir?: string }
@@ -198,7 +230,7 @@ export function adminEditParticipant(cid: number, id: number, field: EditableFie
   const before = field === 'sports' ? p.sports : String(p[field])
   if (field === 'sports') row.sports = value.split(',').map((s) => s.trim()).filter(Boolean)
   else (row as Record<string, unknown>)[field] = value
-  const v = validateRow(row, JSON.parse(ev.sports), columnConfig('{}'))
+  const v = validateRow(row, JSON.parse(ev.sports), columnConfig('{}'), eventSettings(ev.config).ages)
   if (!v.ok && v.errors[field]) return { ok: false as const, error: v.errors[field] }
   const stored = field === 'sports' ? JSON.stringify(row.sports) : field === 'age' ? Number(value) : field === 'mobile' && v.value ? v.value.mobile : value
   db().prepare(`update participant set ${field} = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') where community_id = ? and id = ?`).run(stored, cid, id)
@@ -206,7 +238,7 @@ export function adminEditParticipant(cid: number, id: number, field: EditableFie
   return { ok: true as const }
 }
 
-export type BulkAction = 'verify' | 'unverify' | 'confirm' | 'cancel' | 'member' | 'guest'
+export type BulkAction = 'verify' | 'unverify' | 'confirm' | 'cancel' | 'member' | 'guest' | 'promote'
 export function bulkAction(cid: number, ids: number[], action: BulkAction, actor: string) {
   if (!ids.length) return 0
   const d = db()
@@ -215,6 +247,8 @@ export function bulkAction(cid: number, ids: number[], action: BulkAction, actor
   try {
     if (action === 'verify' || action === 'unverify')
       d.prepare(`update participant set verified = ? where community_id = ? and id in (${ph})`).run(action === 'verify' ? 1 : 0, cid, ...ids)
+    else if (action === 'promote')
+      d.prepare(`update participant set waitlist = '[]' where community_id = ? and id in (${ph})`).run(cid, ...ids)
     else if (action === 'member' || action === 'guest')
       d.prepare(`update participant set kind = ? where community_id = ? and id in (${ph})`).run(action, cid, ...ids)
     else {
@@ -241,7 +275,7 @@ export function stats(rows: Row[]) {
     guests: live.filter((r) => r.kind === 'guest').length,
     verified: live.filter((r) => r.verified).length,
     pending: new Set(live.filter((r) => r.reg_status === 'pending').map((r) => r.registration_id)).size,
-    sports: count((r) => r.sportList), diets: count((r) => [r.diet]), tshirts: count((r) => (r.tshirt ? [r.tshirt] : [])),
+    sports: count((r) => r.sportList.filter((x) => !r.waitlistList.includes(x))), waitlisted: count((r) => r.waitlistList), diets: count((r) => [r.diet]), tshirts: count((r) => (r.tshirt ? [r.tshirt] : [])),
     gender: count((r) => [r.gender]),
   }
 }

@@ -46,7 +46,7 @@ export default async function Registrations({ params, searchParams }: { params: 
             <select name="action">
               <option value="verify">Mark verified</option><option value="unverify">Clear verified</option>
               <option value="confirm">Confirm registration</option><option value="cancel">Cancel registration</option>
-              <option value="member">Set as member</option><option value="guest">Set as guest</option>
+              <option value="member">Set as member</option><option value="guest">Set as guest</option><option value="promote">Move off waitlist</option>
             </select>
             <ConfirmButton message="Apply this action to all selected rows?">Apply to selected</ConfirmButton>
           </label>
@@ -63,7 +63,7 @@ export default async function Registrations({ params, searchParams }: { params: 
                   <td><EditableCell slug={slug} id={r.id} field="age" value={String(r.age)} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="gender" value={r.gender} options={[...GENDERS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="mobile" value={r.mobile} /></td>
-                  <td><EditableCell slug={slug} id={r.id} field="sports" value={r.sportList.join(', ')} /></td>
+                  <td><EditableCell slug={slug} id={r.id} field="sports" value={r.sportList.join(', ')} />{r.waitlistList.length > 0 && <small className="wl"> waitlist: {r.waitlistList.join(', ')}</small>}</td>
                   <td><EditableCell slug={slug} id={r.id} field="skill" value={r.skill} options={['', ...SKILLS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="diet" value={r.diet} options={[...DIETS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="tshirt" value={r.tshirt} options={['', ...TSHIRTS]} /></td>

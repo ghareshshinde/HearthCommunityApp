@@ -6,12 +6,17 @@ import {
   type ColumnConfig, type ParticipantInput, type RowErrors,
 } from '@/lib/registration/rules'
 import type { Contact, SubmitResult } from '@/lib/repo'
+import Pic from '@/components/Pic'
+import { sportIcon } from '@/lib/sports'
 
 type Props = {
   slug: string
   eventId: number
   sports: string[]
   columns: ColumnConfig
+  ages?: Record<string, { min?: number; max?: number }>
+  waiver: string
+  seatsLeft: Record<string, number | null>
   initialRows?: ParticipantInput[]
   initialContact?: Partial<Contact>
   submit: (contact: Contact, rows: ParticipantInput[]) => Promise<SubmitResult>
@@ -20,8 +25,9 @@ type Props = {
 }
 
 const DRAFT_DAYS = 7
+const NO_AGES = {}
 
-export default function RegistrationForm({ slug, eventId, sports, columns, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
+export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, waiver, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
   const router = useRouter()
   const [rows, setRows] = useState<ParticipantInput[]>(initialRows?.length ? initialRows : [blankRow()])
   const [contact, setContact] = useState<Contact>({ registrantName: '', registrantMobile: '', registrantEmail: '', emergencyName: '', emergencyMobile: '', waiver: false, ...initialContact })
@@ -54,7 +60,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, initi
     return () => clearTimeout(t)
   }, [rows, contact, key, initialRows])
 
-  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns)), [rows, sports, columns])
+  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns, ages)), [rows, sports, columns, ages])
   const summary = {
     participants: rows.length,
     members: rows.filter((r) => r.kind === 'member').length,
@@ -141,6 +147,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, initi
 
   return (
     <form onSubmit={onSubmit} noValidate>
+      <input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" className="hp" value={contact.website ?? ''} onChange={(e) => setContact({ ...contact, website: e.target.value })} />
       <fieldset className="card">
         <legend>Your details</legend>
         <div className="fields">
@@ -177,7 +184,8 @@ export default function RegistrationForm({ slug, eventId, sports, columns, initi
                 <div className="chips" role="group" aria-label="Sports">
                   {sports.map((s) => (
                     <label key={s} className={`chip ${r.sports.includes(s) ? 'on' : ''}`}>
-                      <input type="checkbox" checked={r.sports.includes(s)} onChange={(e) => set(i, 'sports', e.target.checked ? [...r.sports, s] : r.sports.filter((x) => x !== s))} />{s}
+                      <input type="checkbox" checked={r.sports.includes(s)} onChange={(e) => set(i, 'sports', e.target.checked ? [...r.sports, s] : r.sports.filter((x) => x !== s))} />
+                      <Pic src={sportIcon(s)} size={22} />{s}{seatsLeft[s] === 0 && <em className="wl"> waitlist</em>}
                     </label>
                   ))}
                 </div>)}
@@ -198,12 +206,12 @@ export default function RegistrationForm({ slug, eventId, sports, columns, initi
       {rows.length > SOFT_LIMIT && <p className="warn" role="status">You are registering more than {SOFT_LIMIT} people. You can continue, but please check the list.</p>}
 
       <p className="summary" aria-live="polite">
-        <strong>{summary.participants}</strong> participants · <strong>{summary.members}</strong> members · <strong>{summary.guests}</strong> guests · <strong>{summary.sports}</strong> sports
+        <strong>{summary.participants}</strong> {summary.participants === 1 ? 'participant' : 'participants'} · <strong>{summary.members}</strong> {summary.members === 1 ? 'member' : 'members'} · <strong>{summary.guests}</strong> {summary.guests === 1 ? 'guest' : 'guests'} · <strong>{summary.sports}</strong> {summary.sports === 1 ? 'sport' : 'sports'}
       </p>
 
       <label className="waiver">
         <input type="checkbox" checked={contact.waiver} onChange={(e) => setContact({ ...contact, waiver: e.target.checked })} />
-        I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.
+        {waiver}
       </label>
       {contactErrors.waiver && <small role="alert" className="cellerr">{contactErrors.waiver}</small>}
       {formError && <p role="alert" className="cellerr">{formError}</p>}

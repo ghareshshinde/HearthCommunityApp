@@ -65,6 +65,50 @@ describe('registration lifecycle', () => {
   })
 })
 
+describe('capacity, waitlist and age limits', () => {
+  const withConfig = (cfg: object) => ({ ...ev, config: JSON.stringify(cfg) })
+  it('waitlists people past a sport\'s capacity instead of refusing them, and counts only seated people', () => {
+    const e = withConfig({ capacity: { Chess: 2 } })
+    repo.createRegistration(e, contact, [person({ name: 'A One' }), person({ name: 'B Two' })])
+    const r = repo.createRegistration(e, contact, [person({ name: 'C Three', sports: ['Chess', 'Carrom'] })])
+    expect(r.ok).toBe(true)
+    const c = repo.listRows(jsg.id, ev.id).find((p) => p.name === 'C Three')!
+    expect(c.waitlistList).toEqual(['Chess'])
+    expect(c.sportList).toEqual(['Chess', 'Carrom'])
+    const s = repo.stats(repo.listRows(jsg.id, ev.id))
+    expect(s.sports.Chess).toBe(2)
+    expect(s.waitlisted.Chess).toBe(1)
+    expect(repo.seatsLeft(e).Chess).toBe(0)
+  })
+  it('a cancelled registration frees its seats, and an edit does not count against itself', () => {
+    const e = withConfig({ capacity: { Chess: 1 } })
+    const r1 = repo.createRegistration(e, contact, [person({ name: 'A One' })])
+    if (!r1.ok) throw new Error('setup')
+    const reg = repo.getRegistrationByToken(r1.token)!
+    expect(repo.updateRegistration(e, reg, contact, [person({ name: 'A One', age: '35' })]).ok).toBe(true)
+    expect(repo.listRows(jsg.id, ev.id)[0].waitlistList).toEqual([])
+    repo.cancelRegistration(e, reg, 'public')
+    expect(repo.seatsLeft(e).Chess).toBe(1)
+  })
+  it('an admin can move people off the waitlist', () => {
+    const e = withConfig({ capacity: { Chess: 1 } })
+    repo.createRegistration(e, contact, [person({ name: 'A One' }), person({ name: 'B Two' })])
+    const waitlisted = repo.listRows(jsg.id, ev.id).filter((p) => p.waitlistList.length)
+    expect(waitlisted).toHaveLength(1)
+    repo.bulkAction(jsg.id, waitlisted.map((p) => p.id), 'promote', 'admin')
+    expect(repo.listRows(jsg.id, ev.id).every((p) => !p.waitlistList.length)).toBe(true)
+  })
+  it('enforces age limits per sport, naming the sport', () => {
+    const e = withConfig({ ages: { Chess: { min: 10, max: 60 } } })
+    expect(repo.createRegistration(e, contact, [person({ age: '8', mobile: '' })])).toMatchObject({ ok: false, rowErrors: { 0: { sports: 'Chess is for ages 10 to 60' } } })
+    expect(repo.createRegistration(e, contact, [person({ age: '25' })]).ok).toBe(true)
+  })
+  it('ignores bots that fill the hidden honeypot field', () => {
+    expect(repo.createRegistration(ev, { ...contact, website: 'http://spam.example' }, [person()]).ok).toBe(false)
+    expect(repo.listRows(jsg.id, ev.id)).toHaveLength(0)
+  })
+})
+
 describe('admin workspace', () => {
   it('filters combine, and inline edits are validated and audited with before and after', () => {
     repo.createRegistration(ev, contact, [person(), person({ name: 'Guest', kind: 'guest', gender: 'Male', diet: 'Jain', sports: ['Cricket'] })])

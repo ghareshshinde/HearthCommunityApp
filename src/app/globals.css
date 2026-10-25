@@ -39,3 +39,28 @@ table.data{width:100%;border-collapse:collapse;font-size:.85rem}
 table.data th,table.data td{border-bottom:1px solid var(--color-border);padding:.3rem .4rem;text-align:left;vertical-align:top}
 .tag{display:inline-block;border-radius:999px;padding:0 .5rem;border:1px solid var(--color-border);font-size:.75rem}
 .linklike{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:text;text-align:left;border-bottom:1px dotted var(--color-border)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.wl{font-size:.7rem;color:var(--color-warning);font-style:normal;font-weight:600}
+.chip img{margin-left:-.25rem}
+/* Hero, tiles and steps (from the approved designs) */
+.hero{position:relative;overflow:hidden;background:var(--color-primary);color:#fff}
+.hero>.bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hero .inner{position:relative;max-width:72rem;margin:0 auto;padding:3rem 1.5rem;display:flex;flex-wrap:wrap;gap:2rem;align-items:center}
+.hero h1{font-size:clamp(2.2rem,6vw,4.2rem);line-height:1;margin:.5rem 0}
+.badge{display:inline-block;background:var(--color-accent);color:#0f172a;font-weight:800;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;padding:.35rem .9rem;border-radius:999px}
+.btn.gold{background:var(--color-accent);border-color:var(--color-accent);color:#0f172a;font-weight:800}
+.btn.ghost{background:transparent;border-color:#fff;color:#fff}
+.tiles{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr))}
+.tile{background:var(--color-surface);border:1px solid var(--color-border);border-radius:calc(var(--radius)*1.5);padding:1rem;display:flex;flex-direction:column;align-items:center;gap:.5rem;text-align:center}
+.steps{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}
+.step{background:var(--color-surface);border:1px solid var(--color-border);border-radius:calc(var(--radius)*1.5);overflow:hidden}
+.step .pic{display:flex;align-items:center;justify-content:center;height:9rem;background:#e8effb}
+.step .txt{padding:1rem}
+.facts{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))}
+.fact{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.9rem 1.1rem}
+.fact small{display:block;color:var(--color-text-secondary)}
+.avatars{display:flex}.avatars img{border-radius:50%;border:3px solid #fff;margin-left:-.6rem}
+.poster{border-radius:1rem;box-shadow:0 18px 40px rgba(15,23,42,.35);transform:rotate(3deg);max-width:100%;height:auto}
+.person{display:flex;align-items:center;gap:.6rem}.person img{border-radius:50%}
+header.site a{text-decoration:none;color:inherit}
+.hero + main{padding-top:2rem}

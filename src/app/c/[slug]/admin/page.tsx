@@ -3,6 +3,8 @@ import { requireCommunity } from '@/lib/session'
 import { listEvents, listRows, stats } from '@/lib/repo'
 import { adminLogout } from '@/app/actions'
 import { formatIst } from '@/lib/time'
+import { sportIcon } from '@/lib/sports'
+import Pic from '@/components/Pic'
 
 export default async function AdminHome({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -21,11 +23,16 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
         const s = stats(listRows(c.id, e.id))
         return (
           <section key={e.id} className="card" style={{ marginBottom: '1rem' }}>
-            <h2>{e.title} <span className="tag">{e.status}</span></h2>
-            <p className="muted">{formatIst(e.starts_at)} · {e.venue}</p>
-            <p><strong>{s.registrations}</strong> registrations ({s.pending} awaiting confirmation) · <strong>{s.participants}</strong> people · {s.members} members · {s.guests} guests · {s.verified} verified</p>
+            <div className="hero" style={{ borderRadius: 'var(--radius)', margin: '-1rem -1rem 1rem' }}>
+              <Pic className="bg" src="/img/hero.svg" width={1200} height={460} />
+              <div className="inner" style={{ padding: '1.2rem 1.5rem', justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                <div><h2 style={{ margin: 0 }}>{e.title} <span className="tag" style={{ color: '#fff' }}>{e.status}</span></h2><div style={{ opacity: 0.85 }}>{formatIst(e.starts_at)} · {e.venue}</div></div>
+                <Pic src="/img/trophy.svg" width={56} height={72} />
+              </div>
+            </div>
+            <p><strong>{s.registrations}</strong> registrations ({s.pending} awaiting confirmation) · <strong>{s.participants}</strong> people · {s.members} members · {s.guests} guests · {s.verified} verified{Object.keys(s.waitlisted).length > 0 && ` · waitlisted: ${Object.entries(s.waitlisted).map(([k, v]) => `${k} ${v}`).join(', ')}`}</p>
             <div className="grid">
-              <Counts title="Sports" data={s.sports} /><Counts title="Diet" data={s.diets} /><Counts title="T-shirt" data={s.tshirts} /><Counts title="Gender" data={s.gender} />
+              <Counts title="Sports" data={s.sports} icons /><Counts title="Diet" data={s.diets} /><Counts title="T-shirt" data={s.tshirts} /><Counts title="Gender" data={s.gender} />
             </div>
             <p>
               <Link className="btn" href={`/c/${slug}/admin/events/${e.id}/registrations`}>Registrations</Link>{' '}
@@ -38,10 +45,10 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
   )
 }
 
-function Counts({ title, data }: { title: string; data: Record<string, number> }) {
+function Counts({ title, data, icons }: { title: string; data: Record<string, number>; icons?: boolean }) {
   return (
     <div><strong>{title}</strong>
-      <table className="data"><tbody>{Object.entries(data).sort((a, b) => b[1] - a[1]).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}</tbody></table>
+      <table className="data"><tbody>{Object.entries(data).sort((a, b) => b[1] - a[1]).map(([k, v]) => <tr key={k}><td><span className="person">{icons && <Pic src={sportIcon(k)} size={28} />}{k}</span></td><td>{v}</td></tr>)}</tbody></table>
     </div>
   )
 }

@@ -68,13 +68,24 @@ export async function adminLogout(slug: string) {
 export async function saveEventAction(slug: string, eventId: number | null, form: FormData) {
   const c = await adminCtx(slug)
   const cols = Object.fromEntries((Object.keys(DEFAULT_COLUMNS) as OptionalColumn[]).map((k) => [k, { show: form.get(`show_${k}`) === 'on', required: form.get(`req_${k}`) === 'on' }]))
-  const sports = String(form.get('sports') ?? '').split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+  const sports: string[] = []
+  const capacity: Record<string, number> = {}
+  const ages: Record<string, { min?: number; max?: number }> = {}
+  for (let i = 0; form.has(`sport_name_${i}`); i++) {
+    const name = String(form.get(`sport_name_${i}`) ?? '').trim()
+    if (!name || sports.includes(name)) continue
+    sports.push(name)
+    const cap = Number(form.get(`sport_cap_${i}`)), min = Number(form.get(`sport_min_${i}`)), max = Number(form.get(`sport_max_${i}`))
+    if (cap > 0) capacity[name] = Math.floor(cap)
+    if (min > 0 || max > 0) ages[name] = { min: min > 0 ? min : undefined, max: max > 0 ? max : undefined }
+  }
   const title = String(form.get('title') ?? '').trim()
   if (!title || !sports.length) throw new Error('Title and at least one sport are required')
+  const waiver = String(form.get('waiver') ?? '').trim().slice(0, 1000)
   const id = repo.saveEvent(c.id, eventId, {
     title, description: String(form.get('description') ?? ''), venue: String(form.get('venue') ?? ''), map_url: String(form.get('map_url') ?? ''),
     starts_at: istInputToIso(String(form.get('starts_at') ?? '')), ends_at: istInputToIso(String(form.get('ends_at') ?? '')),
-    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ columns: cols }),
+    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ columns: cols, capacity, ages, waiver }),
     status: (['draft', 'published', 'closed'].includes(String(form.get('status'))) ? String(form.get('status')) : 'draft') as 'draft',
   })
   repo.audit(c.id, 'admin', eventId ? 'event.updated' : 'event.created', String(id), { title })
@@ -92,7 +103,7 @@ export async function editParticipantAction(slug: string, id: number, field: rep
 export async function bulkActionForm(slug: string, eventId: number, form: FormData) {
   const c = await adminCtx(slug)
   const action = String(form.get('action')) as repo.BulkAction
-  if (!['verify', 'unverify', 'confirm', 'cancel', 'member', 'guest'].includes(action)) return
+  if (!['verify', 'unverify', 'confirm', 'cancel', 'member', 'guest', 'promote'].includes(action)) return
   const ids = form.getAll('ids').map(Number).filter(Number.isInteger)
   repo.bulkAction(c.id, ids, action, 'admin')
   revalidatePath(`/c/${slug}/admin`)

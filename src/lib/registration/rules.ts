@@ -33,6 +33,25 @@ export const ENGLISH_NAME = /^[A-Za-z][A-Za-z .'’-]*$/
 const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
+export type AgeLimit = { min?: number; max?: number }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string }
+export const DEFAULT_WAIVER =
+  'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
+
+/** Per-event rules kept in event.config: capacity per sport, age limits per sport and the waiver wording. */
+export function eventSettings(raw: string | null | undefined): EventSettings {
+  let c: Record<string, unknown> = {}
+  try { c = JSON.parse(raw || '{}') } catch { /* defaults */ }
+  const capacity: Record<string, number> = {}
+  for (const [k, v] of Object.entries((c.capacity ?? {}) as Record<string, unknown>)) if (Number(v) > 0) capacity[k] = Math.floor(Number(v))
+  const ages: Record<string, AgeLimit> = {}
+  for (const [k, v] of Object.entries((c.ages ?? {}) as Record<string, AgeLimit>)) {
+    const min = Number(v?.min) || undefined, max = Number(v?.max) || undefined
+    if (min || max) ages[k] = { min, max }
+  }
+  return { capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+}
+
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
 const mobile = z.string().transform(normalizeMobile).refine((v) => /^\d{10}$/.test(v), 'Enter a 10-digit mobile number')
 
@@ -48,7 +67,7 @@ export const blankRow = (): ParticipantInput => ({
 export type RowErrors = Partial<Record<keyof ParticipantInput, string>>
 
 /** Validates one row against the event. Returns cleaned values or per-cell errors. Shared by browser and server. */
-export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig) {
+export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig, ages: Record<string, AgeLimit> = {}) {
   const errors: RowErrors = {}
   const name = row.name.trim()
   if (!name) errors.name = 'Required'
@@ -70,6 +89,15 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
   if (cols.email.show && cols.email.required && !email) errors.email = 'Required'
   if (!row.sports.length) errors.sports = 'Pick at least one sport'
   else if (row.sports.some((s) => !eventSports.includes(s))) errors.sports = 'Unknown sport'
+  else if (!errors.age) {
+    for (const sp of row.sports) {
+      const lim = ages[sp]
+      if (lim && ((lim.min && age < lim.min) || (lim.max && age > lim.max))) {
+        errors.sports = `${sp} is for ages ${lim.min ?? 1} to ${lim.max ?? 99}`
+        break
+      }
+    }
+  }
   if (cols.skill.show && cols.skill.required && !SKILLS.includes(row.skill as never)) errors.skill = 'Choose a level'
   if (row.skill && !SKILLS.includes(row.skill as never)) errors.skill = 'Choose a level'
   if (!DIETS.includes(row.diet as never)) errors.diet = 'Choose a diet'
