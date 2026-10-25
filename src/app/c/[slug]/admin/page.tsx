@@ -16,7 +16,7 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
       <h1>Admin console</h1>
       <p>
         <Link className="btn" href={`/c/${slug}/admin/events/new`}>New event</Link>{' '}
-        <Link href={`/c/${slug}/admin/branding`}>Branding</Link> · <Link href={`/c/${slug}/admin/audit`}>Audit log and outbox</Link> · <Link href={`/c/${slug}/admin/password`}>Change password</Link> · <a href={`/c/${slug}/admin/backup`}>Download backup</a>{' '}
+        <Link href={`/c/${slug}/admin/branding`}>Branding</Link> · <Link href={`/c/${slug}/admin/staff`}>Staff and check-in</Link> · <Link href={`/c/${slug}/admin/audit`}>Audit log and outbox</Link> · <Link href={`/c/${slug}/admin/password`}>Change password</Link> · <a href={`/c/${slug}/admin/backup`}>Download backup</a>{' '}
         <form action={adminLogout.bind(null, slug)} style={{ display: 'inline' }}><button>Sign out</button></form>
       </p>
       {events.map((e) => {
@@ -30,7 +30,7 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
                 <Pic src="/img/trophy.svg" width={56} height={72} />
               </div>
             </div>
-            <p><strong>{s.registrations}</strong> registrations ({s.pending} awaiting confirmation) · <strong>{s.participants}</strong> people · {s.members} members · {s.guests} guests · {s.verified} verified{Object.keys(s.waitlisted).length > 0 && ` · waitlisted: ${Object.entries(s.waitlisted).map(([k, v]) => `${k} ${v}`).join(', ')}`}</p>
+            <p><strong>{s.registrations}</strong> registrations ({s.pending} awaiting confirmation) · <strong>{s.participants}</strong> people · {s.members} members · {s.guests} guests · {s.verified} verified · {s.arrived} arrived{Object.keys(s.waitlisted).length > 0 && ` · waitlisted: ${Object.entries(s.waitlisted).map(([k, v]) => `${k} ${v}`).join(', ')}`}</p>
             <div className="grid">
               <Counts title="Sports" data={s.sports} icons /><Counts title="Diet" data={s.diets} /><Counts title="T-shirt" data={s.tshirts} /><Counts title="Gender" data={s.gender} />
             </div>

@@ -34,7 +34,7 @@ const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number } }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -49,7 +49,9 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
     const min = Number(v?.min) || undefined, max = Number(v?.max) || undefined
     if (min || max) ages[k] = { min, max }
   }
-  return { capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
+  const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
+  return { gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')

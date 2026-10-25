@@ -17,6 +17,7 @@ function secret() {
   if (!s && process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET is required in production')
   return s ?? 'dev-only-secret'
 }
+export const signValue = (v: string) => sign(v)
 const sign = (v: string) => createHmac('sha256', secret()).update(v).digest('hex')
 
 /** Admin session cookie value, scoped to one community slug so it never unlocks another. */

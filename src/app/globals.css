@@ -64,3 +64,5 @@ table.data th,table.data td{border-bottom:1px solid var(--color-border);padding:
 .person{display:flex;align-items:center;gap:.6rem}.person img{border-radius:50%}
 header.site a{text-decoration:none;color:inherit}
 .hero + main{padding-top:2rem}
+.tag.on{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
+@media print{header.site,form button,.btn{display:none}}

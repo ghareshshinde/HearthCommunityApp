@@ -29,6 +29,9 @@ The app saves a snapshot to a Cloud Storage bucket after every change and restor
 ## Registration journey (complete)
 Event page with sports tiles, then the family grid (paste from Excel, keyboard, phone cards, draft saved 7 days), per-cell errors, age limits per sport, capacity per sport with automatic waitlist, soft warning above 8, waiver, honeypot against bots. After submit the registrant gets a reference and a secret link to edit or cancel until the cut-off, plus Google Calendar and .ics links. Admins set capacity, age limits, columns and waiver wording per event, verify, filter, edit inline with an audit trail, move people off the waitlist and export to Excel.
 
+## Event day
+Registrants get a QR ticket (`/c/<slug>/t/<code>`, works offline once opened). Admin > Staff and check-in creates the standard set of logins (2 per sport, 2 common sports admins, 2 gate volunteers) with expiring invite links and passwords shown once, and sets gate names and the spot desk (open/closed, walk-in limit). Gate volunteers scan the QR with the phone camera or search by name, mobile or reference, tick who is present and admit; walk-ins are added to a family or as a separate entry. Sport admins see a live roster of their sport (arrivals update every 5 seconds, no contact details).
+
 ## What is built
 Tenancy by `/c/slug` (and `slug.ROOT_DOMAIN`), branding tokens, English/Hindi/Gujarati scaffold, event admin, tabular registration grid, edit/cancel by secret link, registrations workspace with inline edit, bulk actions, Excel export, dashboard, audit log.
-Not yet built: photo-verified check-in and spot desk, sports operations and podium, live board, feedback, catering and volunteer screens, roster import, full Hindi and Gujarati translations, offline PWA, real email sending.
+Not yet built: photos, pairing and results with the podium, live board, feedback, catering and volunteer screens, roster import, full Hindi and Gujarati translations, offline PWA, real email sending.

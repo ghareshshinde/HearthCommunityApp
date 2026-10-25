@@ -122,3 +122,122 @@ test('event page shows the games with icons, and a registrant can edit then canc
   await page.getByRole('button', { name: 'Cancel registration' }).click()
   await expect(page.getByText('This registration is cancelled.')).toBeVisible()
 })
+
+test('event day: staff invites, gate check-in without photos, walk-ins, sport admin scope, revoke', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  // A family registers and opens its QR ticket.
+  await page.goto('/c/jsg/e/1/register')
+  await page.waitForLoadState('networkidle') // let the form hydrate before typing
+  await page.getByLabel('Your name').fill('Gate Family')
+  await page.getByLabel('Your mobile').fill('9811111111')
+  await page.getByLabel('Emergency contact name').fill('Em Gate')
+  await page.getByLabel('Emergency contact mobile').fill('9811111112')
+  for (const [i, n] of ['Gate Parent', 'Gate Child'].entries()) {
+    if (i) await page.getByRole('button', { name: 'Add person' }).click()
+    await page.locator(`[data-r="${i}"][data-c="name"]`).fill(n)
+    await page.locator(`[data-r="${i}"][data-c="age"]`).fill(i ? '9' : '38')
+    await page.locator(`[data-r="${i}"][data-c="gender"]`).selectOption(i ? 'Female' : 'Male')
+    if (!i) await page.locator(`[data-r="${i}"][data-c="mobile"]`).fill('9811111111')
+    await page.locator('tr[data-row="' + i + '"] td[data-label="Sports"] label', { hasText: 'Chess' }).click()
+    await page.locator(`[data-r="${i}"][data-c="skill"]`).selectOption('casual')
+  }
+  await page.getByLabel('I accept the injury waiver').check()
+  await page.getByRole('button', { name: 'Submit registration' }).click()
+  await expect(page.getByText(/Registration saved/)).toBeVisible()
+  const ref = (await page.getByText(/^Reference/).first().textContent())!.match(/HR-[0-9A-F]{8}/)![0]
+  await page.getByRole('link', { name: 'Show my QR ticket' }).click()
+  await expect(page.locator('svg').first()).toBeVisible()
+  await expect(page.getByText(ref).first()).toBeVisible()
+  await expect(page.getByText('not yet in')).toHaveCount(2)
+
+  // Admin opens the spot desk, names the gates and creates the standard staff set.
+  const admin = await (await browser.newContext()).newPage()
+  await admin.goto('/c/jsg/admin/login')
+  await admin.getByLabel('Admin password').fill('e2e-password')
+  await admin.getByRole('button', { name: 'Sign in' }).click()
+  await expect(admin.getByRole('heading', { name: 'Admin console' })).toBeVisible()
+  await admin.goto('/c/jsg/admin/staff')
+  await admin.getByLabel(/Check-in points/).fill('Main gate\nSide gate')
+  await admin.getByLabel('Spot registration is open').check()
+  await admin.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(admin.getByRole('heading', { name: /Staff and check-in/ })).toBeVisible()
+  await admin.getByRole('button', { name: 'Create the standard set' }).click()
+  await expect(admin.getByText('Copy these now')).toBeVisible()
+  const row = (user: string) => admin.locator('section', { hasText: 'Copy these now' }).locator('tr', { has: admin.locator(`code:text-is("${user}")`) })
+  const gateInvite = (await row('gate-1').locator('td').nth(3).textContent())!.trim()
+  const chessUser = 'chess-1'
+  const chessPass = (await row(chessUser).locator('td').nth(2).textContent())!.trim()
+  const chess2Invite = (await row('chess-2').locator('td').nth(3).textContent())!.trim()
+  await admin.reload()
+  await expect(admin.getByText('Every sport has two admins')).toBeVisible()
+
+  // Gate volunteer opens the invite link: no typing needed.
+  const gateCtx = await browser.newContext({ viewport: { width: 390, height: 800 } })
+  const gate = await gateCtx.newPage()
+  await gate.goto(gateInvite)
+  await expect(gate.getByRole('link', { name: 'Open check-in' })).toBeVisible()
+  await gate.getByRole('link', { name: 'Open check-in' }).click()
+  await gate.getByLabel('This device is at').selectOption('Main gate')
+  await gate.getByLabel('Search').fill(ref)
+  await gate.getByRole('button', { name: 'Find' }).click()
+  await gate.getByText(`Gate Family`).first().click()
+  await expect(gate.getByText('Gate Parent')).toBeVisible()
+  await gate.getByRole('button', { name: 'Admit selected' }).click()
+  await expect(gate.getByText('Done. 2 people admitted.')).toBeVisible()
+  await expect(gate.getByText('Everyone on this ticket is already in.')).toBeVisible()
+  await expect(gate.getByText(/Main gate, Gate volunteer/).first()).toBeVisible()
+
+  // A late cousin joins the same family at the spot desk and is admitted in the same step.
+  await gate.getByText('Add someone to this family (walk-in)').click()
+  const fam = gate.locator('details', { hasText: 'Add someone to this family' })
+  await fam.getByLabel('Name', { exact: true }).fill('Late Cousin')
+  await fam.getByLabel('Age').fill('21')
+  await fam.getByLabel('Gender').selectOption('Male')
+  await fam.getByLabel('Mobile (adults)').fill('9822222222')
+  await fam.getByLabel('Chess').check()
+  await fam.getByLabel('Injury waiver accepted at the desk').check()
+  await fam.getByRole('button', { name: 'Register and admit' }).click()
+  await expect(gate.getByText('Late Cousin')).toBeVisible()
+  await expect(gate.getByText('walk-in').first()).toBeVisible()
+
+  // The family ticket now shows three people in.
+  await page.reload()
+  await expect(page.getByText(/In at/)).toHaveCount(3)
+
+  // A sport admin signs in with username and password and sees only their sport, without contact details.
+  const sportCtx = await browser.newContext()
+  const sport = await sportCtx.newPage()
+  await sport.goto('/c/jsg/staff/login')
+  await sport.getByLabel('Username').fill(chessUser)
+  await sport.getByLabel('Password').fill(chessPass)
+  await sport.waitForLoadState('networkidle')
+  await sport.getByRole('button', { name: 'Sign in' }).click()
+  await expect(sport.getByRole('heading', { name: 'Chess' })).toBeVisible()
+  await expect(sport.getByText('Gate Parent')).toBeVisible()
+  await expect(sport.getByText('Late Cousin')).toBeVisible()
+  expect(await sport.content()).not.toMatch(/9811111111|9822222222/)
+  // Other sports and the gate are off limits: they bounce back to the admin's own sport.
+  await sport.goto('/c/jsg/staff/sport/Cricket')
+  await expect(sport).toHaveURL(/staff\/sport\/Chess$/)
+  await sport.goto('/c/jsg/staff/gate')
+  await expect(sport).toHaveURL(/staff\/sport\/Chess$/)
+  expect((await sport.goto('/c/jsg/admin'))?.url()).toMatch(/admin\/login/)
+
+  // The second Chess admin gets in by invite link and sees the same live data.
+  const sport2 = await (await browser.newContext()).newPage()
+  await sport2.goto(chess2Invite)
+  await expect(sport2.getByText('Late Cousin')).toBeVisible()
+
+  // Revoking one admin cuts off their open session at once; the other keeps working.
+  await admin.goto('/c/jsg/admin/staff')
+  await admin.locator('tr', { has: admin.locator('code:text-is("chess-1")') }).getByRole('button', { name: 'Revoke' }).click()
+  await sport.goto('/c/jsg/staff/sport/Chess')
+  await expect(sport).toHaveURL(/staff\/login/)
+  await sport2.reload()
+  await expect(sport2.getByRole('heading', { name: 'Chess' })).toBeVisible()
+
+  // An expired or wrong invite is refused.
+  const stranger = await (await browser.newContext()).newPage()
+  await stranger.goto('/c/jsg/staff/join/not-a-real-token')
+  await expect(stranger.getByText(/invite link has expired/)).toBeVisible()
+})

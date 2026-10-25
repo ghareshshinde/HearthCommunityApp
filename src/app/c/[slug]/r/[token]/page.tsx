@@ -7,6 +7,7 @@ import RegistrationForm from '@/components/RegistrationForm'
 import Pic from '@/components/Pic'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
+import { makeTicket } from '@/lib/ticket'
 
 const AVATARS = ['avatar-1', 'avatar-2', 'avatar-3', 'avatar-4']
 
@@ -33,6 +34,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
           </p>
         )}
         <p>Reference <strong>{reg.ref}</strong> · <span className="tag">{reg.status}</span> · registered {formatIst(reg.created_at)}</p>
+        {reg.status !== 'cancelled' && <p><a className="btn" href={`/c/${slug}/t/${makeTicket(reg.id)}`}>Show my QR ticket</a></p>}
         <p><a href={googleCalendarUrl(ev)} target="_blank" rel="noreferrer">Add to Google Calendar</a> · <a href={`/c/${slug}/e/${ev.id}/calendar.ics`}>Download .ics</a></p>
         {reg.status === 'cancelled' && <p className="warn">This registration is cancelled.</p>}
         {editable ? (

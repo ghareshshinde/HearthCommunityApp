@@ -12,12 +12,13 @@ export type EventRow = {
 export type RegistrationRow = {
   id: number; community_id: number; event_id: number; ref: string; token: string; registrant_name: string; registrant_mobile: string
   registrant_email: string; emergency_name: string; emergency_mobile: string; waiver_at: string; status: 'pending' | 'confirmed' | 'cancelled'
-  created_at: string; updated_at: string
+  created_at: string; updated_at: string; source: string
 }
 export type ParticipantRow = {
   id: number; community_id: number; event_id: number; registration_id: number; name: string; age: number; gender: 'Male' | 'Female'
   mobile: string; email: string; sports: string; skill: string; diet: string; tshirt: string; accessibility: string
   kind: 'member' | 'guest'; verified: number; registered_at: string; waitlist: string
+  source: string; checked_in_at: string | null; checked_in_by: string | null; checked_in_gate: string | null
 }
 
 const db = () => getDb()
@@ -73,6 +74,11 @@ export function saveBranding(cid: number, branding: unknown) {
 // ---------- events ----------
 export const listEvents = (cid: number, publishedOnly = false) =>
   all<EventRow>(`select * from event where community_id = ? ${publishedOnly ? "and status = 'published'" : ''} order by starts_at desc, id desc`, cid)
+/** The event staff work on today: the newest one that is published or closed, else the newest. */
+export function currentEvent(cid: number): EventRow | undefined {
+  const all = listEvents(cid)
+  return all.find((e) => e.status !== 'draft') ?? all[0]
+}
 export const getEvent = (cid: number, id: number) => one<EventRow>('select * from event where community_id = ? and id = ?', cid, id)
 
 export type EventInput = Omit<EventRow, 'id' | 'community_id'>
@@ -137,18 +143,23 @@ export function seatsLeft(ev: EventRow): Record<string, number | null> {
 }
 
 /** First come, first served per sport; anyone past a sport's capacity is waitlisted for it, never refused (X4). */
-function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[]) {
+type InsertOpts = { source?: string; checkedInBy?: string; gate?: string; now?: string }
+function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[], opts: InsertOpts = {}): { id: number; waitlist: string[] }[] {
   const cap = eventSettings(ev.config).capacity
   const used = sportUsage(ev.community_id, ev.id, rid)
-  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,diet,tshirt,accessibility,kind) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,diet,tshirt,accessibility,kind,source,checked_in_at,checked_in_by,checked_in_gate) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const made: { id: number; waitlist: string[] }[] = []
   for (const p of rows) {
     const waitlist: string[] = []
     for (const sp of p.sports) {
       if (cap[sp] && (used[sp] ?? 0) >= cap[sp]) waitlist.push(sp)
       else used[sp] = (used[sp] ?? 0) + 1
     }
-    st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, p.diet, p.tshirt, p.accessibility, p.kind)
+    const r = st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, p.diet, p.tshirt, p.accessibility, p.kind,
+      opts.source ?? 'online', opts.checkedInBy ? (opts.now ?? new Date().toISOString()) : null, opts.checkedInBy ?? null, opts.checkedInBy ? (opts.gate ?? '') : null)
+    made.push({ id: Number(r.lastInsertRowid), waitlist })
   }
+  return made
 }
 
 export function createRegistration(ev: EventRow, contact: Contact, rows: ParticipantInput[], now = new Date()): SubmitResult {
@@ -204,6 +215,108 @@ export function cancelRegistration(ev: EventRow, reg: RegistrationRow, actor: st
   return true
 }
 
+// ---------- tickets, check-in and walk-ins ----------
+export const getRegistrationById = (cid: number, id: number) =>
+  one<RegistrationRow>('select * from registration where community_id = ? and id = ?', cid, id)
+
+/** Find a registration at the gate by reference, anyone's name or anyone's mobile number. */
+export function findRegistrations(cid: number, eventId: number, q: string): RegistrationRow[] {
+  const like = `%${q.trim().replace(/[%_]/g, '')}%`
+  if (q.trim().length < 2) return []
+  return all<RegistrationRow>(
+    `select distinct r.* from registration r left join participant p on p.registration_id = r.id and p.community_id = r.community_id
+     where r.community_id = ? and r.event_id = ? and r.status != 'cancelled'
+       and (r.ref like ? or r.registrant_name like ? or r.registrant_mobile like ? or p.name like ? or p.mobile like ?)
+     order by r.created_at desc limit 20`, cid, eventId, like, like, like, like, like)
+}
+
+export type CheckInResult = { admitted: number[]; already: { id: number; at: string; by: string }[] }
+/** Idempotent: a second scan never re-admits anyone, it reports who is already in (C1, C2 without photos). */
+export function checkIn(cid: number, ids: number[], by: string, gate: string, now = new Date()): CheckInResult {
+  const out: CheckInResult = { admitted: [], already: [] }
+  const d = db()
+  d.exec('begin')
+  try {
+    for (const id of ids) {
+      const r = d.prepare("update participant set checked_in_at = ?, checked_in_by = ?, checked_in_gate = ? where community_id = ? and id = ? and checked_in_at is null")
+        .run(now.toISOString(), by, gate, cid, id)
+      if (r.changes) out.admitted.push(id)
+      else {
+        const p = one<ParticipantRow>('select * from participant where community_id = ? and id = ?', cid, id)
+        if (p?.checked_in_at) out.already.push({ id, at: p.checked_in_at, by: p.checked_in_by ?? '' })
+      }
+    }
+    if (out.admitted.length) audit(cid, by, 'checkin', gate, { participants: out.admitted })
+    d.exec('commit')
+  } catch (e) { d.exec('rollback'); throw e }
+  return out
+}
+
+export function undoCheckIn(cid: number, id: number, by: string) {
+  const r = db().prepare('update participant set checked_in_at = null, checked_in_by = null, checked_in_gate = null where community_id = ? and id = ? and checked_in_at is not null').run(cid, id)
+  if (r.changes) audit(cid, by, 'checkin.undone', String(id))
+  return r.changes > 0
+}
+
+export type WalkInInput = {
+  person: ParticipantInput
+  /** Add to this existing registration (same family)... */
+  registrationId?: number
+  /** ...or create a separate entry with its own contact. */
+  contact?: { name: string; mobile: string; emergencyName: string; emergencyMobile: string }
+  waiver: boolean
+  by: string
+  gate: string
+}
+export type WalkInResult =
+  | { ok: true; registrationId: number; ref: string; participantId: number; waitlisted: string[] }
+  | { ok: false; error?: string; rowErrors?: Record<string, string>; contactErrors?: Record<string, string> }
+
+/** Spot registration (S1, S4, S5, S6): registers and admits in one step, either into a family or as its own entry. */
+export function addWalkIn(ev: EventRow, input: WalkInInput, now = new Date()): WalkInResult {
+  const cid = ev.community_id
+  const settings = eventSettings(ev.config)
+  if (ev.status === 'draft') return { ok: false, error: 'This event is not published' }
+  if (!settings.spot.open) return { ok: false, error: 'Spot registration is closed' }
+  if (settings.spot.cap > 0) {
+    const used = one<{ n: number }>("select count(*) n from participant p join registration r on r.id = p.registration_id where p.community_id = ? and p.event_id = ? and p.source = 'spot' and r.status != 'cancelled'", cid, ev.id)!.n
+    if (used >= settings.spot.cap) return { ok: false, error: `The walk-in limit of ${settings.spot.cap} has been reached` }
+  }
+  if (!input.waiver) return { ok: false, error: 'Waiver must be accepted at the desk' }
+  const v = validateRow(input.person, JSON.parse(ev.sports), columnConfig(ev.config), settings.ages)
+  if (!v.ok || !v.value) return { ok: false, rowErrors: v.errors as Record<string, string> }
+  const d = db()
+  d.exec('begin')
+  try {
+    let rid: number, ref: string
+    if (input.registrationId) {
+      const reg = getRegistrationById(cid, input.registrationId)
+      if (!reg || reg.event_id !== ev.id || reg.status === 'cancelled') { d.exec('rollback'); return { ok: false, error: 'That registration was not found' } }
+      rid = reg.id; ref = reg.ref
+    } else {
+      const c = input.contact
+      const errs: Record<string, string> = {}
+      const clean = contactSchema.safeParse({ registrantName: c?.name ?? '', registrantMobile: c?.mobile ?? '', registrantEmail: '', emergencyName: c?.emergencyName ?? '', emergencyMobile: c?.emergencyMobile ?? '', waiver: true })
+      if (!clean.success) { for (const i of clean.error.issues) errs[String(i.path[0])] = i.message; d.exec('rollback'); return { ok: false, contactErrors: errs } }
+      ref = newRef()
+      rid = Number(d.prepare("insert into registration (community_id,event_id,ref,token,registrant_name,registrant_mobile,registrant_email,emergency_name,emergency_mobile,waiver_at,status,source) values (?,?,?,?,?,?,?,?,?,?,'confirmed','spot')")
+        .run(cid, ev.id, ref, newToken(), clean.data.registrantName, clean.data.registrantMobile, '', clean.data.emergencyName, clean.data.emergencyMobile, now.toISOString()).lastInsertRowid)
+    }
+    const [made] = insertParticipants(ev, rid, [v.value], { source: 'spot', checkedInBy: input.by, gate: input.gate, now: now.toISOString() })
+    audit(cid, input.by, 'walkin', ref, { participant: made.id, family: !!input.registrationId, gate: input.gate })
+    d.exec('commit')
+    return { ok: true, registrationId: rid, ref, participantId: made.id, waitlisted: made.waitlist }
+  } catch (e) { d.exec('rollback'); throw e }
+}
+
+/** What a sport admin may see: names, ages and arrival, never contact details (SP1, SP2). */
+export type RosterEntry = { id: number; name: string; age: number; gender: string; skill: string; kind: string; checkedInAt: string | null; waitlisted: boolean; withdrawn: boolean }
+export function sportRoster(cid: number, eventId: number, sport: string): RosterEntry[] {
+  return listRows(cid, eventId)
+    .filter((r) => r.sportList.includes(sport))
+    .map((r) => ({ id: r.id, name: r.name, age: r.age, gender: r.gender, skill: r.skill, kind: r.kind, checkedInAt: r.checked_in_at, waitlisted: r.waitlistList.includes(sport), withdrawn: r.reg_status === 'cancelled' }))
+}
+
 // ---------- admin workspace ----------
 export type Row = ParticipantRow & { reg_ref: string; reg_status: RegistrationRow['status']; registrant_name: string; registrant_mobile: string; emergency_name: string; emergency_mobile: string; waiver_at: string; reg_created: string; sportList: string[]; waitlistList: string[] }
 
@@ -215,7 +328,7 @@ export function listRows(cid: number, eventId: number): Row[] {
   ).map((r) => ({ ...r, sportList: JSON.parse(r.sports) as string[], waitlistList: JSON.parse(r.waitlist) as string[] }))
 }
 
-export type Filters = { q?: string; sport?: string; gender?: string; kind?: string; diet?: string; status?: string; verified?: string; minAge?: string; maxAge?: string; sort?: string; dir?: string }
+export type Filters = { arrived?: string; source?: string; q?: string; sport?: string; gender?: string; kind?: string; diet?: string; status?: string; verified?: string; minAge?: string; maxAge?: string; sort?: string; dir?: string }
 export function filterRows(rows: Row[], f: Filters): Row[] {
   const q = f.q?.trim().toLowerCase()
   let out = rows.filter((r) =>
@@ -223,11 +336,13 @@ export function filterRows(rows: Row[], f: Filters): Row[] {
     (!f.sport || r.sportList.includes(f.sport)) && (!f.gender || r.gender === f.gender) && (!f.kind || r.kind === f.kind) &&
     (!f.diet || r.diet === f.diet) && (!f.status || r.reg_status === f.status) &&
     (!f.verified || String(r.verified) === (f.verified === 'yes' ? '1' : '0')) &&
+    (!f.arrived || (f.arrived === 'yes') === !!r.checked_in_at) && (!f.source || r.source === f.source) &&
     (!f.minAge || r.age >= Number(f.minAge)) && (!f.maxAge || r.age <= Number(f.maxAge)),
   )
   const key = (f.sort ?? 'registered_at') as keyof Row
   const dir = f.dir === 'desc' ? -1 : 1
-  out = [...out].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * dir)
+  const val = (r: Row) => (r[key] ?? '') as string | number | string[]
+  out = [...out].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * dir)
   return out
 }
 
@@ -287,6 +402,8 @@ export function stats(rows: Row[]) {
     members: live.filter((r) => r.kind === 'member').length,
     guests: live.filter((r) => r.kind === 'guest').length,
     verified: live.filter((r) => r.verified).length,
+    arrived: live.filter((r) => r.checked_in_at).length,
+    walkIns: live.filter((r) => r.source === 'spot').length,
     pending: new Set(live.filter((r) => r.reg_status === 'pending').map((r) => r.registration_id)).size,
     sports: count((r) => r.sportList.filter((x) => !r.waitlistList.includes(x))), waitlisted: count((r) => r.waitlistList), diets: count((r) => [r.diet]), tshirts: count((r) => (r.tshirt ? [r.tshirt] : [])),
     gender: count((r) => [r.gender]),

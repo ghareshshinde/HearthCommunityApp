@@ -14,6 +14,11 @@ export function getDb(): DatabaseSync {
   db.exec('pragma journal_mode = wal; pragma foreign_keys = on;')
   db.exec(SCHEMA)
   addColumn(db, 'participant', 'waitlist', "text not null default '[]'")
+  addColumn(db, 'participant', 'source', "text not null default 'online'")
+  addColumn(db, 'participant', 'checked_in_at', 'text')
+  addColumn(db, 'participant', 'checked_in_by', 'text')
+  addColumn(db, 'participant', 'checked_in_gate', 'text')
+  addColumn(db, 'registration', 'source', "text not null default 'online'")
   return db
 }
 

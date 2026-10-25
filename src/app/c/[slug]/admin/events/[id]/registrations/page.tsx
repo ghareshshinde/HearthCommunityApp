@@ -30,7 +30,7 @@ export default async function Registrations({ params, searchParams }: { params: 
       <form className="fields" method="get">
         <label>Search<input name="q" defaultValue={f.q} placeholder="Name, mobile, reference" /></label>
         {opt('sport', 'Sport', sports)}{opt('gender', 'Gender', GENDERS)}{opt('kind', 'Member or guest', ['member', 'guest'])}
-        {opt('diet', 'Diet', DIETS)}{opt('status', 'Registration status', ['pending', 'confirmed', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}
+        {opt('diet', 'Diet', DIETS)}{opt('status', 'Registration status', ['pending', 'confirmed', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}{opt('arrived', 'Arrived', ['yes', 'no'])}{opt('source', 'Source', ['online', 'spot'])}
         <label>Min age<input name="minAge" defaultValue={f.minAge} inputMode="numeric" /></label>
         <label>Max age<input name="maxAge" defaultValue={f.maxAge} inputMode="numeric" /></label>
         <label>Sort by<select name="sort" defaultValue={f.sort ?? 'registered_at'}>{['registered_at', 'name', 'age', 'gender', 'kind', 'reg_ref', 'diet'].map((v) => <option key={v}>{v}</option>)}</select></label>
@@ -53,7 +53,7 @@ export default async function Registrations({ params, searchParams }: { params: 
         </p>
         <div style={{ overflowX: 'auto' }}>
           <table className="data">
-            <thead><tr><th /><th>Ref</th><th>Registered (IST)</th><th>Name</th><th>Age</th><th>Gender</th><th>Mobile</th><th>Sports</th><th>Skill</th><th>Diet</th><th>T-shirt</th><th>Access.</th><th>Type</th><th>Verified</th><th>Status</th><th>Registrant</th></tr></thead>
+            <thead><tr><th /><th>Ref</th><th>Registered (IST)</th><th>Name</th><th>Age</th><th>Gender</th><th>Mobile</th><th>Sports</th><th>Skill</th><th>Diet</th><th>T-shirt</th><th>Access.</th><th>Type</th><th>Verified</th><th>Arrived</th><th>Status</th><th>Registrant</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} style={r.reg_status === 'cancelled' ? { opacity: 0.5 } : undefined}>
@@ -69,7 +69,7 @@ export default async function Registrations({ params, searchParams }: { params: 
                   <td><EditableCell slug={slug} id={r.id} field="tshirt" value={r.tshirt} options={['', ...TSHIRTS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="accessibility" value={r.accessibility} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="kind" value={r.kind} options={['member', 'guest']} /></td>
-                  <td>{r.verified ? 'Yes' : 'No'}</td><td><span className="tag">{r.reg_status}</span></td>
+                  <td>{r.verified ? 'Yes' : 'No'}</td><td>{r.checked_in_at ? formatIst(r.checked_in_at, { timeStyle: 'short' }) : ''}{r.source === 'spot' ? ' (walk-in)' : ''}</td><td><span className="tag">{r.reg_status}</span></td>
                   <td>{r.registrant_name}<br />{r.registrant_mobile}</td>
                 </tr>
               ))}

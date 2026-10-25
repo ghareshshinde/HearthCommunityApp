@@ -38,6 +38,7 @@ create table if not exists registration (
   emergency_name text not null,
   emergency_mobile text not null,
   waiver_at text not null,
+  source text not null default 'online',
   status text not null default 'pending' check (status in ('pending','confirmed','cancelled')),
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -60,11 +61,29 @@ create table if not exists participant (
   tshirt text not null default '',
   accessibility text not null default '',
   kind text not null check (kind in ('member','guest')),
+  source text not null default 'online',   -- online registration or added at the spot desk
+  checked_in_at text,
+  checked_in_by text,
+  checked_in_gate text,
   verified integer not null default 0,
   registered_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 create index if not exists participant_event on participant(community_id, event_id);
+create table if not exists staff (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  name text not null,
+  role text not null check (role in ('sport','sports_all','gate')),
+  sport text,
+  username text not null,
+  password_hash text not null,
+  invite_hash text,
+  invite_expires_at text,
+  active integer not null default 1,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  unique (community_id, username)
+);
 create table if not exists audit_log (
   id integer primary key autoincrement,
   community_id integer references community(id),
