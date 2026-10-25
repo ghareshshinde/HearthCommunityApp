@@ -51,8 +51,33 @@ const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
 export type Question = { id: string; label: string; kind: 'text' | 'choice'; options: string[]; required: boolean }
+export const RULE_KEYS = ['all', 'singles', 'doubles', 'team'] as const
+export type RuleKey = (typeof RULE_KEYS)[number]
+/** Written rules the organisers publish: for the whole event, and per sport with optional extra text for singles, doubles or team play. */
+export type EventRules = { general: string; sports: Record<string, Partial<Record<RuleKey, string>>> }
+const RULE_MAX = 3000
+export function parseRules(v: unknown): EventRules {
+  const o = (v ?? {}) as { general?: unknown; sports?: Record<string, Record<string, unknown>> }
+  const clean = (x: unknown) => String(x ?? '').replace(/\r\n/g, '\n').trim().slice(0, RULE_MAX)
+  const sports: EventRules['sports'] = {}
+  for (const [sp, r] of Object.entries(o.sports ?? {})) {
+    const entry: Partial<Record<RuleKey, string>> = {}
+    for (const k of RULE_KEYS) { const t = clean(r?.[k]); if (t) entry[k] = t }
+    if (Object.keys(entry).length) sports[sp] = entry
+  }
+  return { general: clean(o.general), sports }
+}
+/** What a player in this sport and format must read: the sport's general rules first, then the format's own. */
+export function rulesFor(rules: EventRules, sport: string, entryType?: 'singles' | 'doubles' | 'team'): { label: string; text: string }[] {
+  const r = rules.sports[sport] ?? {}
+  const out: { label: string; text: string }[] = []
+  if (r.all) out.push({ label: `${sport}: all formats`, text: r.all })
+  for (const k of entryType ? [entryType] : (['singles', 'doubles', 'team'] as const)) if (r[k]) out.push({ label: `${sport}: ${k}`, text: r[k]! })
+  return out
+}
+
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[]; questions: Question[] }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[]; questions: Question[]; rules: EventRules }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -70,7 +95,7 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
   const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
   const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
   // Required unless an admin switches it off: the emailed link is how a family gets back to its registration.
-  return { questions: parseQuestions(c.questions), diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  return { rules: parseRules(c.rules), questions: parseQuestions(c.questions), diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')

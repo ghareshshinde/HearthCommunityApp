@@ -736,3 +736,6 @@ Live board at `/c/<slug>/e/<id>/board` for a projector: bracket per category (pu
 | Database | SQLite on one Cloud Run instance, snapshot to a versioned Cloud Storage bucket after every change. Right for one event of about 300 families. Move to managed Postgres (Cloud SQL) only when a second community goes live or more than one instance is needed. Until then no migration work is done. |
 | Phases 3 and 4 | Start only when the owner says so. Nothing in them is built or planned before then. |
 | Proxy risk | Accepted for the first event. Gate volunteers check names and ages on screen. No photo check. |
+
+### AM14. Rules and landing page (built)
+Admins write rules in the event form: one block for the whole event, and per sport an "all formats" block plus separate singles, doubles or team text (only the formats the sport allows are offered). Families read them on the event and registration pages. A coordinator sees the sport's rules on the categories page and the rules for the category's own format on its console. Rules are plain text, stored with the event. The platform home page now shows a hero with search, events open for registration, communities in their own colours, and how it works.

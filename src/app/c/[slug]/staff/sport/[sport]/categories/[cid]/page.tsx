@@ -6,6 +6,9 @@ import * as A from '@/app/sports-actions'
 import { sportIcon } from '@/lib/sports'
 import { formatIst } from '@/lib/time'
 import AutoRefresh from '@/components/AutoRefresh'
+import RulesView from '@/components/RulesView'
+import { eventSettings } from '@/lib/registration/rules'
+import { getEvent } from '@/lib/repo'
 import Pic from '@/components/Pic'
 import ConfirmButton from '@/components/ConfirmButton'
 
@@ -43,6 +46,7 @@ export default async function Console({ params, searchParams }: { params: Promis
         <div><h1 style={{ margin: 0 }}>{comp.name}</h1>
           <span className="muted">{sport} · {FORMAT[comp.format]} · {comp.entry_type}{comp.gender ? ` · ${comp.gender}` : ''}{comp.min_age ? ` · from ${comp.min_age}` : ''}{comp.max_age ? ` · up to ${comp.max_age}` : ''}</span></div>
       </div>
+      <RulesView rules={eventSettings(getEvent(c.id, comp.event_id)?.config).rules} sport={sport} entryType={comp.entry_type} title={`Rules for ${comp.entry_type} ${sport}`} />
       {q.msg && <p className="card" role="status" style={{ borderColor: 'var(--color-success)' }}>{q.msg}</p>}
       {q.err && <p className="warn" role="alert">{q.err}</p>}
       {q.warn && <p className="warn" role="alert"><strong>Heads up:</strong> {q.warn}</p>}

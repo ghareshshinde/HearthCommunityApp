@@ -7,6 +7,7 @@ import { googleCalendarUrl } from '@/lib/calendar'
 import { sportIcon } from '@/lib/sports'
 import { eventSettings } from '@/lib/registration/rules'
 import ShareButton from '@/components/ShareButton'
+import RulesView from '@/components/RulesView'
 import Pic from '@/components/Pic'
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string; id: string }> }) {
@@ -75,6 +76,8 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
             )
           })}
         </div>
+
+        <RulesView rules={settings.rules} sports={sports} title="Rules of the event and of each game" />
 
         <p><Link href={`/c/${slug}/e/${id}/results`}>Live results and winners</Link> · <Link href={`/c/${slug}/e/${id}/board`}>Live board (for the big screen)</Link></p>
         <p className="muted">Already registered? <Link href={`/c/${slug}/my`}>Find my registration and QR ticket</Link></p>

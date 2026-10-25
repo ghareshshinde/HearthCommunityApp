@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, parseQuestions, columnConfig, normalizeMobile, parsePaste, validateRow } from './rules'
+import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, parseRules, rulesFor, eventSettings, parseQuestions, columnConfig, normalizeMobile, parsePaste, validateRow } from './rules'
 
 const row = (o = {}) => ({ ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '98765 43210', sports: ['Chess'], skill: 'casual', ...o })
 
@@ -78,5 +78,20 @@ describe('extra questions', () => {
     expect(validateRow(row({ extra: { q1: 'Z+' } }), ['Chess'], DEFAULT_COLUMNS, {}, [], qs).errors.extra).toMatch(/choose one/)
     const ok = validateRow(row({ extra: { q1: 'A+', q3: ' Sunrise High ', q9: 'ignored' } }), ['Chess'], DEFAULT_COLUMNS, {}, [], qs)
     expect(ok.value!.extra).toEqual({ q1: 'A+', q3: 'Sunrise High' })
+  })
+})
+
+describe('event and sport rules', () => {
+  it('keeps clean text per sport and format, drops empty and oversized entries, and picks what applies to a format', () => {
+    const r = parseRules({ general: '  Be on time\r\nNo spikes ', sports: { Badminton: { all: 'Shuttle is provided', singles: '21 points', doubles: '', team: 'x' }, Chess: { all: '   ' }, Cricket: { team: 'y'.repeat(5000) } } })
+    expect(r.general).toBe('Be on time\nNo spikes')
+    expect(r.sports.Badminton).toEqual({ all: 'Shuttle is provided', singles: '21 points', team: 'x' })
+    expect(r.sports.Chess).toBeUndefined()
+    expect(r.sports.Cricket.team).toHaveLength(3000)
+    expect(rulesFor(r, 'Badminton', 'singles').map((x) => x.text)).toEqual(['Shuttle is provided', '21 points'])
+    expect(rulesFor(r, 'Badminton', 'doubles').map((x) => x.text)).toEqual(['Shuttle is provided'])
+    expect(rulesFor(r, 'Badminton').map((x) => x.label)).toEqual(['Badminton: all formats', 'Badminton: singles', 'Badminton: team'])
+    expect(eventSettings(JSON.stringify({ rules: { general: 'Hi' } })).rules.general).toBe('Hi')
+    expect(eventSettings('{}').rules).toEqual({ general: '', sports: {} })
   })
 })

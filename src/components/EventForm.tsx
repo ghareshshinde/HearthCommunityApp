@@ -1,6 +1,6 @@
 import { saveEventAction } from '@/app/actions'
 import { DEFAULT_COLUMNS, DEFAULT_SPORTS, DIETS, columnConfig, eventSettings, type OptionalColumn } from '@/lib/registration/rules'
-import { sportIcon } from '@/lib/sports'
+import { sportFormats, sportIcon } from '@/lib/sports'
 import Pic from '@/components/Pic'
 import { isoToIstInput } from '@/lib/time'
 import type { EventRow } from '@/lib/repo'
@@ -42,6 +42,20 @@ export default function EventForm({ slug, ev }: { slug: string; ev?: EventRow })
             ))}
           </tbody>
         </table>
+      </fieldset>
+      <fieldset><legend>Rules</legend>
+        <p className="muted" style={{ margin: '0 0 .5rem' }}>Shown to families on the event page and to coordinators on each category. Plain text; use new lines. Leave empty for none. Rules for a newly added sport can be written after you save it once.</p>
+        <label>Rules for the whole event<textarea name="rule_general" rows={4} maxLength={3000} defaultValue={settings.rules.general} placeholder="Dress code, conduct, reporting time, refund and cancellation, safety" /></label>
+        {sports.map((sp, i) => (
+          <details key={sp} className="card" style={{ margin: '.5rem 0' }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{sp} rules</summary>
+            <input type="hidden" name={`rule_sport_${i}`} value={sp} />
+            <label>All formats<textarea name={`rule_${i}_all`} rows={3} maxLength={3000} defaultValue={settings.rules.sports[sp]?.all ?? ''} placeholder="Rules that apply to every match of this sport" /></label>
+            {sportFormats(sp).includes('singles') && <label>Singles only<textarea name={`rule_${i}_singles`} rows={3} maxLength={3000} defaultValue={settings.rules.sports[sp]?.singles ?? ''} placeholder="Scoring, match length, serving, tie-breaks for singles" /></label>}
+            {sportFormats(sp).includes('doubles') && <label>Doubles only<textarea name={`rule_${i}_doubles`} rows={3} maxLength={3000} defaultValue={settings.rules.sports[sp]?.doubles ?? ''} placeholder="Scoring, court size, serving order, partner changes for doubles" /></label>}
+            {sportFormats(sp).includes('team') && <label>Team only<textarea name={`rule_${i}_team`} rows={3} maxLength={3000} defaultValue={settings.rules.sports[sp]?.team ?? ''} placeholder="Overs, squad size, substitutions, umpire decisions" /></label>}
+          </details>
+        ))}
       </fieldset>
       <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="contactEmailRequired" defaultChecked={settings.contactEmailRequired} />The registrant&apos;s email is required (their ticket link is sent there)</label>
       <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="approvalRequired" defaultChecked={settings.approvalRequired} />QR tickets work only after an admin approves the registration</label>

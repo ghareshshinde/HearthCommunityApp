@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
 import { getEvent, isOpen, seatsLeft } from '@/lib/repo'
+import RulesView from '@/components/RulesView'
 import Pic from '@/components/Pic'
 import { sportIcon } from '@/lib/sports'
 import { columnConfig, eventSettings } from '@/lib/registration/rules'
@@ -25,6 +26,7 @@ export default async function Register({ params }: { params: Promise<{ slug: str
         </div>
       </section>
       <main className="wide">
+        <RulesView rules={settings.rules} sports={sports} title="Read the rules before you register" />
         <RegistrationForm
           slug={slug} eventId={ev.id} sports={sports} columns={columnConfig(ev.config)} ages={settings.ages} diets={settings.diets} questions={settings.questions} waiver={settings.waiver} emailRequired={settings.contactEmailRequired} seatsLeft={seatsLeft(ev)}
           submit={submitRegistration.bind(null, slug, ev.id)} submitLabel="Submit registration"

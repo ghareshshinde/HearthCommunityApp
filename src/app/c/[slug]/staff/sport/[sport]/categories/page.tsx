@@ -4,6 +4,8 @@ import { canSeeSport, requireActor } from '@/lib/session'
 import { listCompetitions, listEntries, listMatches, podium } from '@/lib/sports-ops'
 import { createCompetitionAction } from '@/app/sports-actions'
 import { defaultTeamSize, sportFormats, sportIcon } from '@/lib/sports'
+import RulesView from '@/components/RulesView'
+import { eventSettings } from '@/lib/registration/rules'
 import Pic from '@/components/Pic'
 
 const FORMAT: Record<string, string> = { knockout: 'Knockout', roundrobin: 'Round robin' }
@@ -22,6 +24,7 @@ export default async function Categories({ params, searchParams }: { params: Pro
       <p><Link href={base}>Players</Link> · <strong>Categories and results</strong></p>
       <div className="person"><Pic src={sportIcon(sport)} size={56} /><h1 style={{ margin: 0 }}>{sport}: categories</h1></div>
       <p className="muted">A category is one competition, for example &ldquo;Men&apos;s singles&rdquo; or &ldquo;Under 12 doubles&rdquo;. You choose who is in it, make the draw, enter the results and publish the rounds.</p>
+      <RulesView rules={eventSettings(ev.config).rules} sport={sport} title={`${sport} rules`} />
       {q.msg && <p className="card" role="status" style={{ borderColor: 'var(--color-success)' }}>{q.msg}</p>}
       {q.err && <p className="warn" role="alert">{q.err}</p>}
 

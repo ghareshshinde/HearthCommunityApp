@@ -16,7 +16,7 @@ import type { ParticipantInput } from '@/lib/registration/rules'
 import { brandingOverrideSchema } from '@/lib/branding/tokens'
 import { resolveBranding, validateContrast } from '@/lib/branding/resolve'
 import { istInputToIso } from '@/lib/time'
-import { DEFAULT_COLUMNS, parseQuestions, type OptionalColumn } from '@/lib/registration/rules'
+import { DEFAULT_COLUMNS, RULE_KEYS, parseQuestions, parseRules, type OptionalColumn } from '@/lib/registration/rules'
 
 async function adminCtx(slug: string) {
   const c = repo.getCommunityBySlug(slug)
@@ -133,12 +133,19 @@ export async function saveEventAction(slug: string, eventId: number | null, form
   if (!title || !sports.length) throw new Error('Title and at least one sport are required')
   const waiver = String(form.get('waiver') ?? '').trim().slice(0, 1000)
   const questions = parseQuestions(Array.from({ length: 5 }, (_, i) => ({ label: form.get(`q_label_${i}`), kind: String(form.get(`q_options_${i}`) ?? '').trim() ? 'choice' : 'text', options: String(form.get(`q_options_${i}`) ?? '').split(','), required: form.get(`q_required_${i}`) === 'on' })))
+  const ruleSports: Record<string, Record<string, string>> = {}
+  for (let i = 0; form.has(`rule_sport_${i}`); i++) {
+    const sp = String(form.get(`rule_sport_${i}`))
+    if (!sports.includes(sp)) continue
+    ruleSports[sp] = Object.fromEntries(RULE_KEYS.map((k) => [k, String(form.get(`rule_${i}_${k}`) ?? '')]))
+  }
+  const rules = parseRules({ general: form.get('rule_general'), sports: ruleSports })
   const diets = [...new Set([...form.getAll('diet_opt').map(String), ...String(form.get('diet_custom') ?? '').split(',')].map((d) => d.trim().slice(0, 30)).filter(Boolean))].slice(0, 12)
   const existing = eventId ? JSON.parse(repo.getEvent(c.id, eventId)?.config || '{}') : {}
   const id = repo.saveEvent(c.id, eventId, {
     title, description: String(form.get('description') ?? ''), venue: String(form.get('venue') ?? ''), map_url: String(form.get('map_url') ?? ''),
     starts_at: istInputToIso(String(form.get('starts_at') ?? '')), ends_at: istInputToIso(String(form.get('ends_at') ?? '')),
-    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ ...existing, columns: cols, diets, questions, capacity, ages, waiver, approvalRequired: form.get('approvalRequired') === 'on', contactEmailRequired: form.get('contactEmailRequired') === 'on' }),
+    cutoff_at: istInputToIso(String(form.get('cutoff_at') ?? '')), sports: JSON.stringify(sports), config: JSON.stringify({ ...existing, columns: cols, diets, questions, rules, capacity, ages, waiver, approvalRequired: form.get('approvalRequired') === 'on', contactEmailRequired: form.get('contactEmailRequired') === 'on' }),
     status: (['draft', 'published', 'closed'].includes(String(form.get('status'))) ? String(form.get('status')) : 'draft') as 'draft',
   })
   repo.audit(c.id, 'admin', eventId ? 'event.updated' : 'event.created', String(id), { title })
