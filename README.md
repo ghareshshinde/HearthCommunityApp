@@ -54,3 +54,7 @@ Sport admins open `Players > Categories and results` for their sport, create a c
 ## Announcements
 
 Admins and sports admins post at `/c/jsg/staff/announce`. Messages scroll along the bottom of every page (urgent ones flash red) and expire on their own or when removed. Visitors can tap Alerts to get a notification while the site is open.
+
+## Live board and feedback
+
+Open `/c/jsg/e/1/board` on the projector. Feedback links appear on each registration page once the event starts; admins manage it at `/c/jsg/admin/events/1/feedback`.

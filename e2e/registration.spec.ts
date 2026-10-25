@@ -506,6 +506,16 @@ test('sports operations: category, draw, two-tap results, podium, public results
   await expect(pub.getByText(/Matches for/)).toBeVisible()
   await expect(pub.getByText('Tara Alpha').first()).toBeVisible()
   expect(await pub.content()).not.toMatch(/9733300001|sports@example\.test/)
+  // The projector board shows the bracket, the champion and who is where, with no contact details.
+  await pub.goto('/c/jsg/e/1/board')
+  await expect(pub.getByRole('button', { name: /Open singles/ })).toBeVisible()
+  await expect(pub.getByText('Champion').first()).toBeVisible()
+  await expect(pub.locator('.b-m.done').first()).toBeVisible()
+  await expect(pub.locator('.b-t.win').first()).toBeVisible() // the WON badge is drawn by CSS on the winner's row
+  expect(await pub.locator('.b-t.win span').first().evaluate((el) => getComputedStyle(el, '::after').content)).toContain('WON')
+  await pub.screenshot({ path: 'test-results/board.png', fullPage: true })
+  await expect(pub.getByText('Matches done')).toBeVisible()
+  expect(await pub.content()).not.toMatch(/9733300001|sports@example\.test/)
 
   // The admin locks the category: result buttons stop working until reopened.
   admin.on('dialog', (d) => d.accept())

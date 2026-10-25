@@ -137,10 +137,14 @@ describe('admin workspace', () => {
     const buf = await buildWorkbook(repo.listRows(jsg.id, ev.id), JSON.parse(ev.sports))
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.load(buf as unknown as ArrayBuffer)
-    expect(wb.worksheets.map((w) => w.name)).toEqual(['All participants', ...JSON.parse(ev.sports)])
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['Counts', 'All participants', ...JSON.parse(ev.sports)])
     expect(wb.getWorksheet('Chess')!.getRow(2).getCell(6).value).toBe('Asha Shah')
     expect(wb.getWorksheet('Cricket')!.getRow(2).getCell(6).value).toBe('Raj Sharma')
     expect(wb.getWorksheet('All participants')!.rowCount).toBe(3)
+    const counts = wb.getWorksheet('Counts')!
+    const cells = counts.getSheetValues().flat().map(String)
+    expect(cells).toEqual(expect.arrayContaining(['Everyone', 'All people', 'Meals by diet', 'No diet chosen', 'Cricket']))
+    expect(counts.getRow(2).getCell(2).value).toBe(2)
   })
 })
 

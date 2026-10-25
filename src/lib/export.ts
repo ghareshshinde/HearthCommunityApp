@@ -19,9 +19,29 @@ function sheet(wb: ExcelJS.Workbook, name: string, rows: Row[]) {
   for (const r of rows) ws.addRow(COLS.map(([, , get]) => get(r)))
 }
 
+/** Catering and logistics counts: people registered and people who have arrived, by diet, T-shirt size and sport. */
+function counts(wb: ExcelJS.Workbook, rows: Row[]) {
+  const ws = wb.addWorksheet('Counts')
+  ws.columns = [{ width: 28 }, { width: 14 }, { width: 14 }]
+  const live = rows.filter((r) => r.reg_status !== 'cancelled' && !(r.reg_state === 'rejected'))
+  const add = (title: string, key: (r: Row) => string[]) => {
+    ws.addRow([title, 'Registered', 'Arrived']).font = { bold: true }
+    const m = new Map<string, [number, number]>()
+    for (const r of live) for (const k of key(r)) { const v = m.get(k) ?? [0, 0]; v[0]++; if (r.checked_in_at) v[1]++; m.set(k, v) }
+    for (const [k, v] of [...m].sort((a, b) => a[0].localeCompare(b[0]))) ws.addRow([k, v[0], v[1]])
+    ws.addRow([])
+  }
+  add('Everyone', () => ['All people'])
+  add('Member or guest', (r) => [r.kind])
+  add('Meals by diet', (r) => [r.diet || 'No diet chosen'])
+  add('T-shirt sizes', (r) => [r.tshirt || 'No size'])
+  add('Sports (not waitlisted)', (r) => r.sportList.filter((s) => !r.waitlistList.includes(s)))
+}
+
 /** RW6/RW7/R1: one "All" sheet plus one tab per sport. Strings are stored as UTF-8 shared strings, so Hindi and Gujarati survive. */
 export async function buildWorkbook(rows: Row[], sports: string[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
+  counts(wb, rows)
   sheet(wb, 'All participants', rows)
   for (const s of sports) sheet(wb, s, rows.filter((r) => r.sportList.includes(s)))
   return Buffer.from(await wb.xlsx.writeBuffer())
