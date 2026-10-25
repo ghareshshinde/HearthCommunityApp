@@ -32,7 +32,7 @@ export function ensureBootstrap() {
   mk.run('jsg', 'JSG Hyderabad', 'trust', 'Hyderabad', 'Jain Social Groups International Federation. Demo tenant for the Sports Fiesta.', hashPassword(pw))
   // Colours taken from the JSG logo: royal blue and gold. Gold is a fill colour only (it fails contrast as text).
   db().prepare("update community set branding = ? where slug = 'jsg'").run(JSON.stringify({
-    name: 'JSG Hyderabad', tagline: 'Grow more to Serve more',
+    name: 'JSG Hyderabad', tagline: 'Grow more to Serve more', logo: '/img/jsg-logo.jpg',
     colors: { primary: '#1e4a9e', secondary: '#17387a', accent: '#f2b705', background: '#f5f8fd', surface: '#ffffff',
       textPrimary: '#0f172a', textSecondary: '#475569', border: '#cbd5e1', link: '#1e4a9e' },
     darkColors: null,

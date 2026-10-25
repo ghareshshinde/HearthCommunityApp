@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { brandingToCss } from '@/lib/branding/css'
 import { requireCommunity } from '@/lib/session'
 
@@ -16,7 +17,12 @@ export default async function CommunityLayout({ children, params }: { children: 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: brandingToCss(c.brand) }} />
-      <header className="site"><Link href={`/c/${slug}`}><strong>{name}</strong></Link></header>
+      <header className="site">
+        <Link href={`/c/${slug}`} style={{ display: 'flex', alignItems: 'center', gap: '.6rem' }}>
+          {c.brand.logo && <Image src={c.brand.logo} alt="" width={44} height={44} style={{ borderRadius: '50%' }} />}
+          <strong>{name}</strong>
+        </Link>
+      </header>
       {children}
     </>
   )
