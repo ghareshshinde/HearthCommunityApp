@@ -23,7 +23,16 @@ ever saves newer data, the app refuses to overwrite it and shows "We could not s
 | `NOTIFY_COPY_TO` | `jsghyd@gmail.com` (comma-separate for more) | A copy of every new registration goes to this address. |
 | max instances | 1 | Required. |
 
-## Steps (Cloud Shell, once, about 10 minutes)
+## Quick way (Cloud Shell, about 10 minutes)
+
+```bash
+git clone https://github.com/ghareshshinde/HearthCommunityApp && cd HearthCommunityApp
+gcloud config set project YOUR-PROJECT-ID
+bash scripts/deploy-cloudrun.sh
+```
+It does every step below, generates the secrets, and prints the site address and the admin password at the end. Email is optional and can be added later (see Email below).
+
+## Steps by hand (Cloud Shell, once, about 10 minutes)
 
 You need a Google Cloud project with billing switched on. Open Cloud Shell (the terminal icon at the top right of the Cloud console).
 
