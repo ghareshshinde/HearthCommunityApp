@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import jsQR from 'jsqr'
-import { ticketFromScan } from '@/lib/ticket'
+import { ticketFromScan } from '@/lib/ticket-scan'
 
 /** Camera scanner that runs in the phone browser: no app to install. Falls back to typing or searching when the camera is blocked. */
 export default function QrScanner({ slug }: { slug: string }) {

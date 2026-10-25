@@ -14,9 +14,4 @@ export function parseTicket(ticket: string): number | null {
   return timingSafeEqual(Buffer.from(m[2]), Buffer.from(expected)) ? Number(m[1]) : null
 }
 
-/** The scanner reads either a bare ticket or the full ticket URL printed in the QR code. */
-export function ticketFromScan(text: string): string {
-  const t = text.trim()
-  const m = /\/t\/([^/?#\s]+)/.exec(t)
-  return m ? decodeURIComponent(m[1]) : t
-}
+export { ticketFromScan } from './ticket-scan'

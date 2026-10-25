@@ -11,6 +11,10 @@ create table if not exists community (
   admin_hash text not null,
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+create table if not exists setting (
+  key text primary key,
+  value text not null
+);
 create table if not exists event (
   id integer primary key autoincrement,
   community_id integer not null references community(id),

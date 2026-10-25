@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { getDb } from './db'
 
 export function hashPassword(pw: string): string {
   const salt = randomBytes(16).toString('hex')
@@ -12,11 +13,20 @@ export function verifyPassword(pw: string, stored: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+let generated: string | undefined
+/** SESSION_SECRET if provided; otherwise one is created on first start and kept in the database, so a host that asks for no settings still works. */
 function secret() {
   const s = process.env.SESSION_SECRET
-  if (!s && process.env.NODE_ENV === 'production') throw new Error('SESSION_SECRET is required in production')
-  return s ?? 'dev-only-secret'
+  if (s) return s
+  if (process.env.NODE_ENV !== 'production') return 'dev-only-secret'
+  if (generated) return generated
+  const d = getDb()
+  const row = d.prepare("select value from setting where key = 'session_secret'").get() as { value: string } | undefined
+  generated = row?.value ?? randomBytes(32).toString('hex')
+  if (!row) d.prepare("insert or ignore into setting (key, value) values ('session_secret', ?)").run(generated)
+  return generated
 }
+export const resetGeneratedSecretForTests = () => { generated = undefined }
 export const signValue = (v: string) => sign(v)
 const sign = (v: string) => createHmac('sha256', secret()).update(v).digest('hex')
 

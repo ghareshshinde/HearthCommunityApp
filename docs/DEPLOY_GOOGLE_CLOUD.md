@@ -110,11 +110,20 @@ and put the SMTP URL (it contains a password) in Secret Manager:
 
 ## Google AI Studio
 
-AI Studio's Build mode can import a GitHub repository and deploy to Cloud Run. I could not confirm from its documentation
-that it accepts a Next.js app with a Dockerfile, so treat that route as untested. The repository is a standard
-container app: if the import works, set the environment variables above and make sure the deployed service has
-**max instances = 1** and a service account with `Storage Object User` on the bucket. If it does not, the Cloud Shell steps
-above deploy the same code.
+AI Studio's Build mode deploys to Cloud Run and syncs with GitHub ([Google's Build mode guide](https://ai.google.dev/gemini-api/docs/aistudio-build-mode)).
+Whether it can import this repository as it is has not been confirmed from Google's documentation, so treat that route as untested.
+
+The app now starts with **no settings at all**. If AI Studio asks for values, use this table:
+
+| Setting AI Studio may ask for | What to enter |
+|---|---|
+| `ADMIN_PASSWORD` | Leave empty. The first visit to `/c/jsg/admin` asks you to choose the admin password. Do that before sharing the link. |
+| `SESSION_SECRET` | Leave empty. One is created and kept automatically. |
+| `DATABASE_URL`, `CACHE_TTL_SECONDS`, `ENABLE_API_CACHE`, `ALLOWED_ORIGINS`, `GEMINI_API_KEY` | Not used by this app. Leave empty. |
+| `SMTP_URL`, `EMAIL_FROM`, `NOTIFY_COPY_TO` | Leave empty. Email is optional. |
+| `GCS_BUCKET` | A Cloud Storage bucket name if you can create one. Without it the data is lost when the host restarts, and the admin console shows a warning. |
+
+If the host cannot keep a bucket, download a backup from the admin console after each day's registrations.
 
 ## Checks after deploying
 

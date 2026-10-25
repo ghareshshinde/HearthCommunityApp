@@ -14,6 +14,9 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
     <main>
       <meta httpEquiv="refresh" content="60" />
       <h1>Admin console</h1>
+      {process.env.NODE_ENV === 'production' && !process.env.GCS_BUCKET && (
+        <p className="warn" role="alert"><strong>Your data is not backed up automatically.</strong> If the host restarts, registrations can be lost. Download a backup often ({'"Download backup"'} below), or set the GCS_BUCKET setting to a Cloud Storage bucket.</p>
+      )}
       <p>
         <Link className="btn" href={`/c/${slug}/admin/events/new`}>New event</Link>{' '}
         <Link href={`/c/${slug}/admin/branding`}>Branding</Link> · <Link href={`/c/${slug}/admin/staff`}>Staff and check-in</Link> · <Link href={`/c/${slug}/staff/announce`}>Announcements</Link> · <Link href={`/c/${slug}/admin/audit`}>Audit log and outbox</Link> · <Link href={`/c/${slug}/admin/password`}>Change password</Link> · <a href={`/c/${slug}/admin/backup`}>Download backup</a>{' '}

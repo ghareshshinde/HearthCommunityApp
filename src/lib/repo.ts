@@ -29,10 +29,11 @@ const one = <T>(sql: string, ...p: (string | number | null)[]) => db().prepare(s
 
 export function ensureBootstrap() {
   if (one<{ n: number }>('select count(*) n from community')!.n > 0) return maybeResetAdminPassword()
+  // With no ADMIN_PASSWORD in production the hash stays empty and the first visit to the admin page chooses the password (see adminSetup).
   const pw = process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? null : 'change-me')
-  if (!pw) throw new Error('Set ADMIN_PASSWORD to create the first community in production')
+  const hash = pw ? hashPassword(pw) : ''
   const mk = db().prepare('insert into community (slug,name,type,city,about,admin_hash) values (?,?,?,?,?,?)')
-  mk.run('jsg', 'JSG Hyderabad', 'trust', 'Hyderabad', 'Jain Social Groups International Federation. Demo tenant for the Sports Fiesta.', hashPassword(pw))
+  mk.run('jsg', 'JSG Hyderabad', 'trust', 'Hyderabad', 'Jain Social Groups International Federation. Demo tenant for the Sports Fiesta.', hash)
   // Colours taken from the JSG logo: royal blue and gold. Gold is a fill colour only (it fails contrast as text).
   db().prepare("update community set branding = ? where slug = 'jsg'").run(JSON.stringify({
     name: 'JSG Hyderabad', tagline: 'Grow more to Serve more', logo: '/img/jsg-logo.jpg',
@@ -42,7 +43,7 @@ export function ensureBootstrap() {
   }))
   // The dummy second community is for development and tests only; a live site gets JSG alone unless SEED_DEMO_EVENT=true.
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_EVENT === 'true')
-    mk.run('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', hashPassword(pw))
+    mk.run('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', hash)
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_EVENT === 'true') {
     const jsg = one<{ id: number }>("select id from community where slug = 'jsg'")!.id
     const inDays = (d: number) => new Date(Date.now() + d * 86400_000).toISOString()

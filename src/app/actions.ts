@@ -96,6 +96,19 @@ export async function adminLogin(slug: string, _prev: { error?: string } | undef
   repo.audit(c.id, 'admin', 'admin.login', slug)
   redirect(`/c/${slug}/admin`)
 }
+/** First run with no ADMIN_PASSWORD set: the first visitor chooses it, once. After that this does nothing. */
+export async function adminSetup(slug: string, _prev: { error?: string } | undefined, form: FormData) {
+  const c = repo.getCommunityBySlug(slug)
+  if (!c || c.admin_hash) return { error: 'The admin password is already set. Sign in instead.' }
+  const pw = String(form.get('password') ?? '')
+  if (pw.length < 10) return { error: 'Use at least 10 characters.' }
+  if (pw !== String(form.get('again') ?? '')) return { error: 'The two passwords differ.' }
+  repo.setAdminPassword(c.id, hashPassword(pw))
+  repo.audit(c.id, 'admin', 'admin.password_set_first_run', slug)
+  await persist()
+  ;(await cookies()).set(cookieName(slug), makeSession(slug), { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 12 * 3600 })
+  redirect(`/c/${slug}/admin`)
+}
 export async function adminLogout(slug: string) {
   ;(await cookies()).delete(cookieName(slug))
   redirect(`/c/${slug}`)
