@@ -151,3 +151,32 @@ describe('rate limiting', () => {
     expect(allow('k', 3, 1000, t + 2000)).toBe(true)
   })
 })
+
+describe('email me my links', () => {
+  it('sends every live registration made with that address its edit and ticket links, and nothing for an unknown address', async () => {
+    const a = repo.createRegistration(ev, contact, [good])
+    const b = repo.createRegistration(ev, { ...contact, registrantName: 'Second Time', submissionKey: 'second-key-1' }, [{ ...good, name: 'Second Time' }])
+    const cancelled = repo.createRegistration(ev, { ...contact, submissionKey: 'second-key-2' }, [good])
+    if (!a.ok || !b.ok || !cancelled.ok) throw new Error('setup')
+    repo.cancelRegistration(ev, repo.getRegistrationByToken(cancelled.token)!, 'public')
+    repo.listOutbox(jsg.id) // confirmations queued so far
+    const before = repo.listOutbox(jsg.id).length
+    expect(repo.queueLinksEmail(jsg.id, 'ASHA@Example.test ')).toBe(2)
+    expect(repo.queueLinksEmail(jsg.id, 'nobody@example.test')).toBe(0)
+    const rows = repo.listOutbox(jsg.id)
+    expect(rows.length).toBe(before + 1)
+    process.env.SMTP_URL = 'smtp://x'
+    await sendQueued(50)
+    const mail = sent.find((m) => m.subject === 'Your registration links')!
+    expect(mail.to).toBe('asha@example.test')
+    expect(mail.text).toContain(`/c/jsg/r/${a.token}`)
+    expect(mail.text).toContain(`/c/jsg/r/${b.token}`)
+    expect(mail.text).toMatch(/\/c\/jsg\/t\/t\d+\.[0-9a-f]{20}/)
+    expect(mail.text).not.toContain(cancelled.token)
+  })
+  it('never mixes communities', () => {
+    repo.createRegistration(ev, contact, [good])
+    const kitty = repo.getCommunityBySlug('kitty-demo')!
+    expect(repo.queueLinksEmail(kitty.id, 'asha@example.test')).toBe(0)
+  })
+})

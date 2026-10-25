@@ -2,6 +2,7 @@ import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
 import { columnConfig, eventSettings, validateRow, contactSchema, submissionShape, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
+import { makeTicket } from './ticket'
 
 /** Every query below takes a community id and filters on it. Nothing else touches the tables. */
 export type Community = { id: number; slug: string; name: string; type: string; city: string | null; about: string | null; branding: string; admin_hash: string }
@@ -209,6 +210,21 @@ function queueConfirmation(ev: EventRow, ref: string, token: string, email: stri
   if (email) queueEmail(ev.community_id, email, `Registration received: ${ev.title} (${ref})`, body)
   const copy = process.env.NOTIFY_COPY_TO
   if (copy) for (const to of copy.split(',').map((x) => x.trim()).filter(Boolean)) queueEmail(ev.community_id, to, `[Copy] New registration ${ref}: ${name}, ${count} ${count === 1 ? 'person' : 'people'}`, body)
+}
+
+/** Emails every registration made with this address its links. Returns how many were found; callers must not reveal that to the visitor. */
+export function queueLinksEmail(cid: number, email: string): number {
+  const addr = email.trim().toLowerCase()
+  const regs = all<RegistrationRow & { title: string }>(
+    `select r.*, e.title from registration r join event e on e.id = r.event_id and e.community_id = r.community_id
+     where r.community_id = ? and lower(r.registrant_email) = ? and r.status != 'cancelled' order by r.created_at desc limit 10`, cid, addr)
+  if (!regs.length) return 0
+  const slug = slugOf(cid)
+  const body = ['Hello,', '', 'Here are your registration links:', '',
+    ...regs.flatMap((r) => [`${r.title} (${r.ref})`, `  View or change: ${publicUrl(`/c/${slug}/r/${r.token}`)}`, `  QR ticket: ${publicUrl(`/c/${slug}/t/${makeTicket(r.id)}`)}`, '']),
+    'Anyone with these links can change the registration, so please do not forward this email.'].join('\n')
+  queueEmail(cid, addr, 'Your registration links', body)
+  return regs.length
 }
 
 export function findTokenByRefAndMobile(cid: number, ref: string, mobile: string): string | null {

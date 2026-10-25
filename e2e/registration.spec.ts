@@ -382,3 +382,13 @@ test('double-tapping submit makes one registration, and a lost link is recovered
   await expect(lost.getByText(ref).first()).toBeVisible()
   await expect(lost.getByRole('link', { name: 'Show my QR ticket' })).toBeVisible()
 })
+
+test('venue poster has a QR to find a lost ticket and one to register; the find page explains email is off', async ({ page }) => {
+  await page.goto('/c/jsg/venue')
+  await expect(page.getByRole('heading', { name: 'Lost your ticket?' })).toBeVisible()
+  await expect(page.locator('[role="img"][aria-label^="QR code"]')).toHaveCount(2)
+  await page.goto('/c/jsg/my')
+  await expect(page.getByRole('heading', { name: 'With your reference' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Email me my links/ })).toHaveCount(0) // no SMTP_URL in this run
+  await expect(page.getByText(/Any volunteer at the gate/)).toBeVisible()
+})

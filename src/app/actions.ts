@@ -39,6 +39,7 @@ export async function submitRegistration(slug: string, eventId: number, contact:
 }
 
 export type FindState = { error?: string; values?: { ref: string; mobile: string } }
+export type EmailLinksState = { message?: string; error?: string }
 /** Lost-link recovery: the reference plus the registrant's mobile number leads back to the edit page. */
 export async function findMyRegistration(slug: string, _prev: FindState | undefined, form: FormData): Promise<FindState> {
   const c = repo.getCommunityBySlug(slug)
@@ -202,4 +203,20 @@ export async function retryEmailsAction(slug: string) {
   repo.audit(c.id, 'admin', 'email.retry', null, r)
   await persist()
   revalidatePath(`/c/${slug}/admin/audit`)
+}
+
+/** "Email me my links": always answers the same way, so nobody can use it to learn which addresses are registered. */
+export async function emailMyLinks(slug: string, _prev: EmailLinksState | undefined, form: FormData): Promise<EmailLinksState> {
+  const c = repo.getCommunityBySlug(slug)
+  const email = String(form.get('email') ?? '').trim().toLowerCase()
+  const ip = ((await headers()).get('x-forwarded-for') ?? 'local').split(',')[0].trim()
+  if (!c) return { error: 'Not found' }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) return { error: 'Enter a valid email address.' }
+  const { mailConfigured } = await import('@/lib/mail')
+  if (!mailConfigured()) return { error: 'Email is not switched on yet. Use your reference and mobile number instead, or ask a volunteer at the venue.' }
+  if (!allow(`links-ip:${ip}`, 5, 10 * 60_000) || !allow(`links-mail:${email}`, 3, 60 * 60_000)) return { error: 'Too many requests. Please wait a while and try again.' }
+  repo.queueLinksEmail(c.id, email)
+  await persist()
+  await deliverEmails()
+  return { message: 'If that address was used to register, we have emailed the links. Check your inbox and spam folder.' }
 }

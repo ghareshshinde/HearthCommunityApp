@@ -23,7 +23,7 @@ export default async function StaffAdminPage({ params, searchParams }: { params:
     <main className="wide">
       <p><Link href={`/c/${slug}/admin`}>Back</Link></p>
       <h1>Staff and check-in: {ev.title}</h1>
-      <p><strong>{s.arrived}</strong> of {s.participants} people checked in · {s.walkIns} walk-ins · <Link href={`/c/${slug}/staff/gate`}>Open the gate screen</Link></p>
+      <p><strong>{s.arrived}</strong> of {s.participants} people checked in · {s.walkIns} walk-ins · <Link href={`/c/${slug}/staff/gate`}>Open the gate screen</Link> · <Link href={`/c/${slug}/venue`}>Print the venue QR poster</Link></p>
 
       <section className="card" style={{ margin: '1rem 0' }}>
         <h2 style={{ marginTop: 0 }}>Cover check</h2>

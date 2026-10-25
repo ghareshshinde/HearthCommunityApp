@@ -32,6 +32,12 @@ Event page with sports tiles, then the family grid (paste from Excel, keyboard, 
 ## Registration safeguards
 Every registration is re-validated on the server (the browser check is only a convenience), malformed or oversized requests are refused without errors, a repeated submit makes one registration, repeated sports count once, a hidden field and a per-connection limit slow bots, and a lost link is recovered with the reference plus the registrant's mobile number (`/c/<slug>/my`). Failed entries keep what was typed.
 
+## Getting back into a registration (no Google, no OTP)
+1. The secret link shown after registering and emailed to the registrant. It is the credential: anyone holding it can edit or cancel.
+2. `/c/<slug>/my`: reference plus the registrant's mobile number leads back to the registration and QR ticket.
+3. Same page, "Email me my links": when email is switched on (`SMTP_URL`), links for every registration made with that address are emailed. The page answers the same way whether or not the address is known.
+4. At the venue: `/c/<slug>/venue` is a printable poster with a QR to the page above and a QR to register. Gate volunteers can also find anyone by name, mobile or reference.
+
 ## Event day
 Registrants get a QR ticket (`/c/<slug>/t/<code>`, works offline once opened). Admin > Staff and check-in creates the standard set of logins (2 per sport, 2 common sports admins, 2 gate volunteers) with expiring invite links and passwords shown once, and sets gate names and the spot desk (open/closed, walk-in limit). Gate volunteers scan the QR with the phone camera or search by name, mobile or reference, tick who is present and admit; walk-ins are added to a family or as a separate entry. Admin > Approve (also from each event on the dashboard) lists registrations waiting for a decision: approve, or reject with a reason. Rejecting or cancelling turns the QR off and frees the seats; reinstating turns it back on; an event setting can make tickets work only after approval. Sport admins see a live roster of their sport (arrivals update every 5 seconds, no contact details).
 
