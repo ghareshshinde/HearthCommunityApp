@@ -15,8 +15,8 @@ await page.goto(`${base}/c/jsg/e/1/register`); await page.waitForLoadState('netw
 await page.getByLabel('Your name').fill('Load Probe'); await page.getByLabel('Your mobile').fill('9000000001')
 await page.getByLabel(/^Your email/).fill('probe@example.test'); await page.getByLabel('Emergency contact name').fill('Em Contact'); await page.getByLabel('Emergency contact mobile').fill('9899999999')
 await page.locator('[data-r="0"][data-c="name"]').fill('Probe Person'); await page.locator('[data-r="0"][data-c="age"]').fill('30'); await page.locator('[data-r="0"][data-c="gender"]').selectOption('Male')
-await page.locator('[data-r="0"][data-c="mobile"]').fill('9000000001'); await page.locator('td[data-label="Sports"] label', { hasText: 'Chess' }).first().click()
-await page.locator('[data-r="0"][data-c^="skill-"]').first().selectOption('casual'); await page.getByLabel('I accept the injury waiver').check()
+await page.locator('[data-r="0"][data-c="mobile"]').fill('9000000001'); await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Chess' }).click()
+await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click(); await page.getByLabel('I accept the injury waiver').check()
 await page.getByRole('button', { name: 'Submit registration' }).click(); await page.waitForURL(/\/r\//)
 const probeUrl = page.url().split('?')[0]
 await browser.close()

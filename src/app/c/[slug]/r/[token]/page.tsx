@@ -1,15 +1,27 @@
 import { notFound } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
 import { getEvent, getRegistrationByToken, isOpen, listParticipantsOfRegistration, seatsLeft, ticketStatus } from '@/lib/repo'
-import { columnConfig, eventSettings, skillsOf, extraOf } from '@/lib/registration/rules'
+import { blankRow, columnConfig, eventSettings, skillsOf, extraOf, formatsOf, partnersOf } from '@/lib/registration/rules'
 import { cancelOwnRegistration, editRegistration } from '@/app/actions'
 import RegistrationForm from '@/components/RegistrationForm'
+import GroupLinks from '@/components/GroupLinks'
 import Pic from '@/components/Pic'
 import SaveLink from '@/components/SaveLink'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { makeTicket } from '@/lib/ticket'
 import { feedbackOpen } from '@/lib/feedback'
+
+type PersonRow = ReturnType<typeof listParticipantsOfRegistration>[number]
+/** The registrant is always the first row. Older registrations kept them separate, so they are put first (or added as a non-playing row) here. */
+function rowsForEdit(people: PersonRow[], reg: { registrant_name: string; registrant_mobile: string; registrant_email: string }) {
+  const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim()
+  const rows = people.map((p) => ({ name: p.name, age: String(p.age), gender: p.gender as string, mobile: p.mobile, email: p.email, sports: JSON.parse(p.sports) as string[], skill: '', skills: skillsOf(p), formats: formatsOf(p), partners: partnersOf(p), extra: extraOf(p), diet: p.diet, tshirt: p.tshirt, accessibility: p.accessibility, kind: p.kind as string }))
+  const at = rows.findIndex((r) => norm(r.name) === norm(reg.registrant_name))
+  if (at < 0) return [{ ...blankRow(), name: reg.registrant_name, mobile: reg.registrant_mobile, email: reg.registrant_email }, ...rows]
+  const [me] = rows.splice(at, 1)
+  return [{ ...me, mobile: me.mobile || reg.registrant_mobile, email: me.email || reg.registrant_email }, ...rows]
+}
 
 const AVATARS = ['avatar-1', 'avatar-2', 'avatar-3', 'avatar-4']
 
@@ -38,6 +50,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
           </p>
         )}
         <p>Reference <strong>{reg.ref}</strong> · <span className="tag">{ts.state}</span> · registered {formatIst(reg.created_at)}</p>
+        {ts.state !== 'rejected' && ts.state !== 'cancelled' && <GroupLinks groups={settings.groups} />}
         {feedbackOpen(ev) && reg.status !== 'cancelled' && <p className="card"><strong>How was the event?</strong> <a className="btn gold" href={`/c/${slug}/r/${token}/feedback`}>Give feedback</a></p>}
         {ts.valid && <p><a className="btn" href={`/c/${slug}/t/${makeTicket(reg.id)}`}>Show my QR ticket</a></p>}
         <p><a href={googleCalendarUrl(ev)} target="_blank" rel="noreferrer">Add to Google Calendar</a> · <a href={`/c/${slug}/e/${ev.id}/calendar.ics`}>Download .ics</a></p>
@@ -49,7 +62,7 @@ export default async function MyRegistration({ params, searchParams }: { params:
             <RegistrationForm
               slug={slug} eventId={ev.id} sports={JSON.parse(ev.sports)} columns={columnConfig(ev.config)} ages={settings.ages} diets={settings.diets} questions={settings.questions} waiver={settings.waiver} emailRequired={settings.contactEmailRequired}
               seatsLeft={seatsLeft(ev)} draftKey={`edit-${reg.id}`}
-              initialRows={people.map((p) => ({ name: p.name, age: String(p.age), gender: p.gender, mobile: p.mobile, email: p.email, sports: JSON.parse(p.sports), skill: '', skills: skillsOf(p), extra: extraOf(p), diet: p.diet, tshirt: p.tshirt, accessibility: p.accessibility, kind: p.kind }))}
+              initialRows={rowsForEdit(people, reg)}
               initialContact={{ registrantName: reg.registrant_name, registrantMobile: reg.registrant_mobile, registrantEmail: reg.registrant_email, emergencyName: reg.emergency_name, emergencyMobile: reg.emergency_mobile, waiver: true }}
               submit={editRegistration.bind(null, token)} submitLabel="Save changes"
             />

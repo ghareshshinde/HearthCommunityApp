@@ -8,6 +8,7 @@ import { eventSettings } from '@/lib/registration/rules'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
 import TicketOffline from '@/components/TicketOffline'
+import GroupLinks from '@/components/GroupLinks'
 import Pic from '@/components/Pic'
 
 export default async function Ticket({ params }: { params: Promise<{ slug: string; token: string }> }) {
@@ -49,6 +50,7 @@ export default async function Ticket({ params }: { params: Promise<{ slug: strin
         {settings.gates.length > 0 && <p><strong>Check-in:</strong> {settings.gates.join(' · ')}</p>}
         {ev.map_url && <p><a href={ev.map_url} target="_blank" rel="noreferrer">Open venue in Maps</a> · <a href={googleCalendarUrl(ev)} target="_blank" rel="noreferrer">Add to calendar</a></p>}
       </div>
+      {ts.valid && <div style={{ marginTop: '1rem' }}><GroupLinks groups={settings.groups} compact /></div>}
       <div className="card" style={{ marginTop: '1rem' }}>
         {people.map((p, i) => (
           <div key={p.id} className="person" style={{ padding: '.5rem 0', borderTop: i ? '1px solid var(--color-border)' : 0 }}>

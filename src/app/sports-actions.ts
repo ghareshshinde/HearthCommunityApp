@@ -59,6 +59,12 @@ export async function addSuggestedPairAction(slug: string, compId: number, a: nu
   const r = ops.addEntry(c.id, compId, [a, b], by)
   return done(slug, comp, r.ok ? { msg: 'Pair created.' } : { err: r.error })
 }
+export async function addSuggestedTeamAction(slug: string, compId: number, name: string, form: FormData) {
+  const { c, by, comp } = await forComp(slug, compId)
+  const ids = form.getAll('ids').map(Number).filter((n) => Number.isInteger(n) && n > 0)
+  const r = ops.addEntry(c.id, compId, ids, by, name)
+  return done(slug, comp, r.ok ? { msg: `Team ${name} created.` } : { err: r.error })
+}
 export async function addAllSinglesAction(slug: string, compId: number) {
   const { c, by, comp } = await forComp(slug, compId)
   const r = ops.addAllSingles(c.id, compId, by)

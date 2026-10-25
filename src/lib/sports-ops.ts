@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { sportFormats } from './sports'
-import { skillsOf } from './registration/rules'
+import { formatsOf, partnersOf, skillsOf } from './registration/rules'
 import { audit, getEvent, listRows, type Row } from './repo'
 
 // ---------- types ----------
@@ -92,6 +92,7 @@ export function eligiblePlayers(cid: number, comp: Competition): Row[] {
   return listRows(cid, comp.event_id).filter((r) =>
     r.sportList.includes(comp.sport) && !r.waitlistList.includes(comp.sport) && r.reg_status !== 'cancelled' && !!r.checked_in_at && !taken.has(r.id) &&
     (!comp.gender || r.gender === comp.gender) && (!comp.min_age || r.age >= comp.min_age) && (!comp.max_age || r.age <= comp.max_age))
+    .filter((r) => (formatsOf(r)[comp.sport] ?? []).includes(comp.entry_type)) // only people who said they play this way
     .map((r) => ({ ...r, skill: skillsOf(r)[comp.sport] ?? '' })) // level in this sport, not overall
 }
 
@@ -202,13 +203,50 @@ export function removePartnerRequest(cid: number, id: number) {
   db().prepare('delete from partner_request where community_id = ? and id = ?').run(cid, id)
 }
 
+const normName = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim()
+export type Declared = { from: Row; text: string; to: Row | null; problem: string }
+/** Partners people named when they registered (a name, or the other family's HR reference). Resolved against the players who can be entered now, across families. */
+export function declaredPartners(cid: number, comp: Competition): Declared[] {
+  const pool = eligiblePlayers(cid, comp)
+  const out: Declared[] = []
+  for (const from of pool) {
+    const text = partnersOf(from)[comp.sport]
+    if (!text) continue
+    const others = pool.filter((p) => p.id !== from.id)
+    const ref = /^HR-[0-9A-F]{8}$/i.test(text.trim()) ? others.filter((p) => p.reg_ref.toUpperCase() === text.trim().toUpperCase()) : null
+    const exact = ref ?? others.filter((p) => normName(p.name) === normName(text))
+    const found = exact.length ? exact : ref ? [] : others.filter((p) => normName(p.name).includes(normName(text)))
+    out.push(found.length === 1
+      ? { from, text, to: found[0], problem: '' }
+      : { from, text, to: null, problem: found.length > 1 ? 'more than one player matches, use the exact name or the HR reference' : 'no arrived player of this category matches yet' })
+  }
+  return out
+}
+
+export type TeamGroup = { key: string; name: string; players: Row[]; tooMany: boolean }
+/** Teams people asked for by name when registering, even across families. Proposals only. */
+export function suggestTeams(cid: number, comp: Competition): TeamGroup[] {
+  if (comp.entry_type !== 'team') return []
+  const groups = new Map<string, TeamGroup>()
+  for (const p of eligiblePlayers(cid, comp)) {
+    const name = partnersOf(p)[comp.sport]
+    if (!name) continue
+    const key = normName(name)
+    const g = groups.get(key) ?? { key, name, players: [], tooMany: false }
+    g.players.push(p); groups.set(key, g)
+  }
+  return [...groups.values()].filter((g) => g.players.length >= 2).map((g) => ({ ...g, tooMany: g.players.length > comp.team_size }))
+}
+
 export type Suggestion = { a: Row; b: Row; reason: 'mutual' | 'requested' | 'similar' }
 /** Proposals only: mutual requests first, then one-sided requests, then the closest in skill and age. Nothing is created until the coordinator confirms. */
 export function suggestPairs(cid: number, comp: Competition): Suggestion[] {
   if (comp.entry_type !== 'doubles') return []
   const pool = eligiblePlayers(cid, comp)
   const byId = new Map(pool.map((p) => [p.id, p]))
-  const reqs = listPartnerRequests(cid, comp.event_id, comp.sport)
+  const typed = listPartnerRequests(cid, comp.event_id, comp.sport)
+  const declared = declaredPartners(cid, comp).filter((d) => d.to).map((d) => ({ from_pid: d.from.id, to_pid: d.to!.id }))
+  const reqs = [...typed, ...declared.filter((d) => !typed.some((t) => t.from_pid === d.from_pid && t.to_pid === d.to_pid))]
   const used = new Set<number>()
   const out: Suggestion[] = []
   const take = (a: Row, b: Row, reason: Suggestion['reason']) => { used.add(a.id); used.add(b.id); out.push({ a, b, reason }) }

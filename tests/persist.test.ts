@@ -26,7 +26,7 @@ class MemoryStore implements BlobStore {
   }
 }
 
-const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Raj', emergencyMobile: '9123456780', waiver: true as const }
+const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Uncle Mohan', emergencyMobile: '9123456780', waiver: true as const }
 const person = { ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '9876543210', sports: ['Chess'], skill: 'casual' }
 
 let dir: string

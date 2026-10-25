@@ -43,6 +43,13 @@ export default function EventForm({ slug, ev }: { slug: string; ev?: EventRow })
           </tbody>
         </table>
       </fieldset>
+      <fieldset><legend>Updates group for registered families</legend>
+        <p className="muted" style={{ margin: '0 0 .5rem' }}>Paste the invite link of a WhatsApp group or channel, a Telegram group or channel, or both. Registered families see a Join button and a QR code on their registration page, ticket and confirmation email. Only links from whatsapp.com, wa.me or t.me are accepted.</p>
+        <div className="fields">
+          <label>WhatsApp group or channel link<input type="url" name="group_whatsapp" defaultValue={settings.groups.whatsapp} placeholder="https://chat.whatsapp.com/..." pattern="https://(chat\.whatsapp\.com|www\.whatsapp\.com|whatsapp\.com|wa\.me)/.+" title="A link that starts with https://chat.whatsapp.com/, https://whatsapp.com/channel/ or https://wa.me/" /></label>
+          <label>Telegram group or channel link<input type="url" name="group_telegram" defaultValue={settings.groups.telegram} placeholder="https://t.me/..." pattern="https://(t\.me|telegram\.me|telegram\.dog)/.+" title="A link that starts with https://t.me/" /></label>
+        </div>
+      </fieldset>
       <fieldset><legend>Rules</legend>
         <p className="muted" style={{ margin: '0 0 .5rem' }}>Shown to families on the event page and to coordinators on each category. Plain text; use new lines. Leave empty for none. Rules for a newly added sport can be written after you save it once.</p>
         <label>Rules for the whole event<textarea name="rule_general" rows={4} maxLength={3000} defaultValue={settings.rules.general} placeholder="Dress code, conduct, reporting time, refund and cancellation, safety" /></label>

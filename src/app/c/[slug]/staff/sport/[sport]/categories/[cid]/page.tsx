@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { canSeeSport, getActor, requireActor } from '@/lib/session'
-import { eligiblePlayers, getCompetition, listEntries, listMatches, listPartnerRequests, podium, roundName, standings, suggestPairs, type Match } from '@/lib/sports-ops'
+import { eligiblePlayers, getCompetition, listEntries, listMatches, listPartnerRequests, podium, roundName, standings, suggestPairs, declaredPartners, suggestTeams, type Match } from '@/lib/sports-ops'
 import * as A from '@/app/sports-actions'
 import { sportIcon } from '@/lib/sports'
 import { formatIst } from '@/lib/time'
@@ -33,6 +33,8 @@ export default async function Console({ params, searchParams }: { params: Promis
   const locked = !!comp.locked
   const pool = comp.drawn ? [] : eligiblePlayers(c.id, comp)
   const suggestions = comp.entry_type === 'doubles' && !comp.drawn ? suggestPairs(c.id, comp) : []
+  const declared = comp.entry_type === 'doubles' && !comp.drawn ? declaredPartners(c.id, comp) : []
+  const teamGroups = comp.entry_type === 'team' && !comp.drawn ? suggestTeams(c.id, comp) : []
   const requests = comp.entry_type === 'doubles' ? listPartnerRequests(c.id, comp.event_id, comp.sport) : []
   const nameOfPlayer = new Map(pool.map((p) => [p.id, p.name]))
   void actor
@@ -130,12 +132,33 @@ export default async function Console({ params, searchParams }: { params: Promis
                     <button className="btn outline">Note the request</button>
                   </form>
                 )}
+                {declared.length > 0 && (
+                  <>
+                    <h3>Partners named at registration</h3>
+                    {declared.map((d) => (
+                      <p key={d.from.id} style={{ margin: '.25rem 0' }}>{d.from.name} asked for &ldquo;{d.text}&rdquo;{d.to ? <> → <strong>{d.to.name}</strong></> : <small className="wl"> ({d.problem})</small>}</p>
+                    ))}
+                  </>
+                )}
                 <h3>Suggested pairs</h3>
                 {suggestions.length === 0 && <p className="muted">No suggestions: fewer than two free players.</p>}
                 {suggestions.map((s) => (
                   <form key={`${s.a.id}-${s.b.id}`} action={A.addSuggestedPairAction.bind(null, slug, comp.id, s.a.id, s.b.id)} className="person" style={{ padding: '.4rem 0', flexWrap: 'wrap' }}>
                     <span style={{ flexGrow: 1 }}><strong>{s.a.name}</strong> + <strong>{s.b.name}</strong> <small className="muted">{s.reason === 'mutual' ? 'both asked for each other' : s.reason === 'requested' ? 'one asked for the other' : `similar skill and age (${s.a.age}, ${s.b.age})`}</small></span>
                     <button className="btn outline">Create this pair</button>
+                  </form>
+                ))}
+              </>
+            )}
+            {teamGroups.length > 0 && (
+              <>
+                <h3>Teams asked for at registration</h3>
+                <p className="muted" style={{ marginTop: 0 }}>Players who gave the same team name, even from different families. Nothing is created until you confirm.</p>
+                {teamGroups.map((g) => (
+                  <form key={g.key} action={A.addSuggestedTeamAction.bind(null, slug, comp.id, g.name)} className="person" style={{ padding: '.4rem 0', flexWrap: 'wrap' }}>
+                    {g.players.map((p) => <input key={p.id} type="hidden" name="ids" value={p.id} />)}
+                    <span style={{ flexGrow: 1 }}><strong>{g.name}</strong>: {g.players.map((p) => p.name).join(', ')}{g.tooMany && <small className="wl"> (more than {comp.team_size} players)</small>}</span>
+                    <button className="btn outline" disabled={g.tooMany}>Create this team</button>
                   </form>
                 ))}
               </>

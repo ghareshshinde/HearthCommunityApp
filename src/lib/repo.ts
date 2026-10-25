@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
-import { columnConfig, eventSettings, extraOf, skillsOf, validateRow, contactSchema, contactSchemaFor, submissionShape, type ParticipantInput } from './registration/rules'
+import { columnConfig, eventSettings, emergencyConflicts, extraOf, formatsOf, partnersOf, registrantProblems, skillsOf, validateRow, contactSchema, contactSchemaFor, submissionShape, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
 import { makeTicket } from './ticket'
 
@@ -18,7 +18,7 @@ export type RegistrationRow = {
 }
 export type ParticipantRow = {
   id: number; community_id: number; event_id: number; registration_id: number; name: string; age: number; gender: 'Male' | 'Female'
-  mobile: string; email: string; sports: string; skill: string; skills: string; extra: string; diet: string; tshirt: string; accessibility: string
+  mobile: string; email: string; sports: string; skill: string; skills: string; formats: string; partners: string; extra: string; diet: string; tshirt: string; accessibility: string
   kind: 'member' | 'guest'; verified: number; registered_at: string; waitlist: string
   source: string; checked_in_at: string | null; checked_in_by: string | null; checked_in_gate: string | null
 }
@@ -125,6 +125,12 @@ export function validateSubmission(ev: EventRow, rawContact: unknown, rawRows: u
     if (!v.ok) rowErrors[i] = v.errors as Record<string, string>
     return v.value
   })
+  if (rows[0]) {
+    // The first row is the person registering, so their details must be those of an adult we can reach.
+    const p = registrantProblems(rows[0], eventSettings(ev.config).contactEmailRequired)
+    if (p.age) rowErrors[0] = { ...(rowErrors[0] ?? {}), age: p.age }
+  }
+  Object.assign(contactErrors, emergencyConflicts(contact.emergencyName, contact.emergencyMobile, rows))
   if (!rows.length) return { ok: false as const, error: 'Add at least one participant' }
   if (rows.length > 60) return { ok: false as const, error: 'Too many participants in one registration' }
   if (Object.keys(contactErrors).length || Object.keys(rowErrors).length) return { ok: false as const, contactErrors, rowErrors }
@@ -156,7 +162,7 @@ type InsertOpts = { source?: string; checkedInBy?: string; gate?: string; now?: 
 function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[], opts: InsertOpts = {}): { id: number; waitlist: string[] }[] {
   const cap = eventSettings(ev.config).capacity
   const used = sportUsage(ev.community_id, ev.id, rid)
-  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,skills,extra,diet,tshirt,accessibility,kind,source,checked_in_at,checked_in_by,checked_in_gate) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,skills,formats,partners,extra,diet,tshirt,accessibility,kind,source,checked_in_at,checked_in_by,checked_in_gate) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
   const made: { id: number; waitlist: string[] }[] = []
   for (const p of rows) {
     const waitlist: string[] = []
@@ -164,7 +170,7 @@ function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnT
       if (cap[sp] && (used[sp] ?? 0) >= cap[sp]) waitlist.push(sp)
       else used[sp] = (used[sp] ?? 0) + 1
     }
-    const r = st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, JSON.stringify(p.skills), JSON.stringify(p.extra), p.diet, p.tshirt, p.accessibility, p.kind,
+    const r = st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, JSON.stringify(p.skills), JSON.stringify(p.formats), JSON.stringify(p.partners), JSON.stringify(p.extra), p.diet, p.tshirt, p.accessibility, p.kind,
       opts.source ?? 'online', opts.checkedInBy ? (opts.now ?? new Date().toISOString()) : null, opts.checkedInBy ?? null, opts.checkedInBy ? (opts.gate ?? '') : null)
     made.push({ id: Number(r.lastInsertRowid), waitlist })
   }
@@ -200,6 +206,12 @@ export function createRegistration(ev: EventRow, contact: Contact, rows: Partici
 /** Public address of this deployment, for links in emails. Set APP_URL (for example https://hearth-xyz.a.run.app). */
 export const publicUrl = (path: string) => `${(process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')}${path}`
 
+function updatesGroupLines(ev: EventRow): string[] {
+  const g = eventSettings(ev.config).groups
+  const lines = [g.whatsapp && `WhatsApp updates: ${g.whatsapp}`, g.telegram && `Telegram updates: ${g.telegram}`].filter(Boolean) as string[]
+  return lines.length ? ['', 'Join the updates group for schedule changes and results:', ...lines] : []
+}
+
 function queueConfirmation(ev: EventRow, ref: string, token: string, email: string, name: string, count: number) {
   const slug = one<{ slug: string }>('select slug from community where id = ?', ev.community_id)!.slug
   const body = [
@@ -208,6 +220,7 @@ function queueConfirmation(ev: EventRow, ref: string, token: string, email: stri
     'The organisers will check your registration and may contact you.', '',
     `View, edit or cancel until the cut-off: ${publicUrl(`/c/${slug}/r/${token}`)}`,
     'Keep this email: the link above is the only way to change your registration.',
+    ...updatesGroupLines(ev),
   ].join('\n')
   // One row for the registrant (when they gave an email) and one copy for the community's own address.
   if (email) queueEmail(ev.community_id, email, `Registration received: ${ev.title} (${ref})`, body)
@@ -459,7 +472,7 @@ export function adminEditParticipant(cid: number, id: number, field: EditableFie
   const p = one<ParticipantRow>('select * from participant where community_id = ? and id = ?', cid, id)
   if (!p) return { ok: false as const, error: 'Not found' }
   const ev = getEvent(cid, p.event_id)!
-  const row: ParticipantInput = { ...p, age: p.age, sports: JSON.parse(p.sports), skills: skillsOf(p), extra: extraOf(p) }
+  const row: ParticipantInput = { ...p, age: p.age, sports: JSON.parse(p.sports), skills: skillsOf(p), formats: formatsOf(p), partners: partnersOf(p), extra: extraOf(p) }
   const before = field === 'sports' ? p.sports : String(p[field])
   if (field === 'sports') row.sports = value.split(',').map((s) => s.trim()).filter(Boolean)
   else (row as Record<string, unknown>)[field] = value

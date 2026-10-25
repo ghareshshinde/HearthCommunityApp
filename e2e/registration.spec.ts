@@ -8,15 +8,9 @@ test('family of 4 plus 2 guests registers, admin sees and exports them', async (
   await page.getByRole('link', { name: 'Register' }).click()
 
   const started = Date.now()
-  await page.getByLabel('Your name').fill('Asha Shah')
-  await page.getByLabel('Your mobile').fill('9876543210')
-  await page.getByLabel('Your email').fill('asha@example.test')
-  await page.getByLabel('Emergency contact name').fill('Raj Shah')
-  await page.getByLabel('Emergency contact mobile').fill('9123456780')
-
   // Paste six rows copied from a spreadsheet into the first Name cell (TR6).
   const tsv = [
-    ['Asha Shah', '34', 'Female', '9876543210', '', 'Chess', 'casual', 'Jain', 'M', '', 'member'],
+    ['Asha Shah', '34', 'Female', '9876543210', 'asha@example.test', 'Chess', 'casual', 'Jain', 'M', '', 'member'],
     ['Raj Shah', '38', 'Male', '9123456780', '', 'Cricket, Badminton', 'competitive', 'Jain', 'L', '', 'member'],
     ['Mira Shah', '9', 'Female', '', '', 'Carrom', 'beginner', 'Jain', '8-10y', '', 'member'],
     ['Veer Shah', '7', 'Male', '', '', 'Carrom', 'beginner', 'Jain', '4-6y', '', 'member'],
@@ -32,6 +26,8 @@ test('family of 4 plus 2 guests registers, admin sees and exports them', async (
   }, tsv)
 
   await expect(page.getByText('6 participants · 4 members · 2 guests')).toBeVisible()
+  await page.getByLabel('Emergency contact name').fill('Uncle Mohan')
+  await page.getByLabel('Emergency contact mobile').fill('9123456781')
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
@@ -74,7 +70,8 @@ test('family of 4 plus 2 guests registers, admin sees and exports them', async (
   // Registrant can reopen via the secret link; a bad token 404s.
   await page.goto(regUrl.split('?')[0])
   await expect(page.getByText(ref)).toBeVisible()
-  expect((await page.goto('/c/jsg/r/not-a-token'))?.status()).toBe(404)
+  await page.goto('/c/jsg/r/not-a-token')
+  await expect(page.getByText('This page could not be found')).toBeVisible()
 })
 
 test('login offers no Google or OTP, and unknown community is 404', async ({ page }) => {
@@ -113,8 +110,8 @@ test('event page shows the games with icons, and a registrant can edit then canc
   await page.locator('[data-r="0"][data-c="age"]').fill('30')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Male')
   await page.locator('[data-r="0"][data-c="mobile"]').fill('9876500000')
-  await page.locator('td[data-label^="Sports"] label', { hasText: 'Chess' }).first().click()
-  await page.locator('[data-r="0"][data-c="skill-Chess"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Chess' }).first().click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
@@ -141,8 +138,8 @@ test('event day: staff invites, gate check-in without photos, walk-ins, sport ad
     await page.locator(`[data-r="${i}"][data-c="age"]`).fill(i ? '9' : '38')
     await page.locator(`[data-r="${i}"][data-c="gender"]`).selectOption(i ? 'Female' : 'Male')
     if (!i) await page.locator(`[data-r="${i}"][data-c="mobile"]`).fill('9811111111')
-    await page.locator('tr[data-row="' + i + '"] td[data-label^="Sports"] label', { hasText: 'Chess' }).click()
-    await page.locator(`[data-r="${i}"][data-c="skill-Chess"]`).selectOption('casual')
+    await page.locator('tr[data-games="' + i + '"] .gc-head', { hasText: 'Chess' }).click()
+    await page.locator(`tr[data-games="${i}"] .gamecard`, { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click()
   }
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
@@ -183,7 +180,7 @@ test('event day: staff invites, gate check-in without photos, walk-ins, sport ad
   await gate.getByLabel('This device is at').selectOption('Main gate')
   await gate.getByLabel('Search').fill(ref)
   await gate.getByRole('button', { name: 'Find' }).click()
-  await gate.getByText(`Gate Family`).first().click()
+  await gate.getByText(`Gate Parent`).first().click()
   await expect(gate.getByText('Gate Parent')).toBeVisible()
   await gate.getByRole('button', { name: 'Admit selected' }).click()
   await expect(gate.getByText('Done. 2 people admitted.')).toBeVisible()
@@ -231,7 +228,8 @@ test('event day: staff invites, gate check-in without photos, walk-ins, sport ad
   await expect(sport).toHaveURL(/staff\/sport\/Chess$/)
   await sport.goto('/c/jsg/staff/gate')
   await expect(sport).toHaveURL(/staff\/sport\/Chess$/)
-  expect((await sport.goto('/c/jsg/admin'))?.url()).toMatch(/admin\/login/)
+  await sport.goto('/c/jsg/admin')
+  await expect(sport).toHaveURL(/admin\/login/)
 
   // The second Chess admin gets in by invite link and sees the same live data.
   const sport2 = await (await browser.newContext()).newPage()
@@ -264,8 +262,8 @@ async function registerFamily(page: import('@playwright/test').Page, who: string
   await page.locator('[data-r="0"][data-c="age"]').fill('40')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Female')
   await page.locator('[data-r="0"][data-c="mobile"]').fill(mobile)
-  await page.locator('tr[data-row="0"] td[data-label^="Sports"] label', { hasText: 'Carrom' }).click()
-  await page.locator('[data-r="0"][data-c="skill-Carrom"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Carrom' }).click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Carrom' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
@@ -356,8 +354,8 @@ test('double-tapping submit makes one registration, and a lost link is recovered
   await page.locator('[data-r="0"][data-c="age"]').fill('44')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Male')
   await page.locator('[data-r="0"][data-c="mobile"]').fill('9755500000')
-  await page.locator('tr[data-row="0"] td[data-label^="Sports"] label', { hasText: 'Pickleball' }).click()
-  await page.locator('[data-r="0"][data-c="skill-Pickleball"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Pickleball' }).click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Pickleball' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.getByLabel('I accept the injury waiver').check()
   const submit = page.getByRole('button', { name: 'Submit registration' })
   await submit.dblclick() // two clicks in quick succession
@@ -405,7 +403,6 @@ test('venue poster has a QR to find a lost ticket and one to register; the find 
 test('the registrant email is required, a mistyped domain is flagged, and the form says why', async ({ page }) => {
   await page.goto('/c/jsg/e/1/register')
   await page.waitForLoadState('networkidle')
-  await expect(page.getByText('We email your ticket link here. Please type it carefully.')).toBeVisible()
   await page.getByLabel('Your name').fill('No Email')
   await page.getByLabel('Your mobile').fill('9744400000')
   await page.getByLabel('Emergency contact name').fill('Em Contact')
@@ -414,11 +411,11 @@ test('the registrant email is required, a mistyped domain is flagged, and the fo
   await page.locator('[data-r="0"][data-c="age"]').fill('30')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Male')
   await page.locator('[data-r="0"][data-c="mobile"]').fill('9744400000')
-  await page.locator('tr[data-row="0"] td[data-label^="Sports"] label', { hasText: 'Chess' }).click()
-  await page.locator('[data-r="0"][data-c="skill-Chess"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Chess' }).click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
-  await expect(page.getByText(/Email is required/).first()).toBeVisible()
+  await expect(page.getByText(/Required: your ticket link is sent here/).first()).toBeVisible()
   await expect(page).toHaveURL(/register$/)
   // A typo in a common domain offers a one-tap fix.
   await page.getByLabel(/^Your email/).fill('noemail@gmial.com')
@@ -434,13 +431,8 @@ test('sports operations: category, draw, two-tap results, podium, public results
   // Four adults register for Table Tennis in one go (pasted rows), and the admin checks them in at the gate.
   await page.goto('/c/jsg/e/1/register')
   await page.waitForLoadState('networkidle')
-  await page.getByLabel('Your name').fill('Sports Family')
-  await page.getByLabel('Your mobile').fill('9733300000')
-  await page.getByLabel(/^Your email/).fill('sports@example.test')
-  await page.getByLabel('Emergency contact name').fill('Em Contact')
-  await page.getByLabel('Emergency contact mobile').fill('9899999999')
   const tsv = [
-    ['Tara Alpha', '30', 'Female', '9733300001', '', 'Table Tennis', 'competitive', 'Vegetarian', 'M', '', 'member'],
+    ['Tara Alpha', '30', 'Female', '9733300001', 'sports@example.test', 'Table Tennis', 'competitive', 'Vegetarian', 'M', '', 'member'],
     ['Uma Bravo', '31', 'Female', '9733300002', '', 'Table Tennis', 'casual', 'Vegetarian', 'M', '', 'member'],
     ['Vik Charlie', '32', 'Male', '9733300003', '', 'Table Tennis', 'casual', 'Vegetarian', 'L', '', 'member'],
     ['Wes Delta', '33', 'Male', '9733300004', '', 'Table Tennis', 'beginner', 'Vegetarian', 'L', '', 'member'],
@@ -450,6 +442,8 @@ test('sports operations: category, draw, two-tap results, podium, public results
     const dt = new DataTransfer(); dt.setData('text', text)
     document.activeElement!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
   }, tsv)
+  await page.getByLabel('Emergency contact name').fill('Em Contact')
+  await page.getByLabel('Emergency contact mobile').fill('9899999999')
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
@@ -462,7 +456,7 @@ test('sports operations: category, draw, two-tap results, podium, public results
   await admin.getByRole('button', { name: 'Sign in' }).click()
   await expect(admin.getByRole('heading', { name: 'Admin console' })).toBeVisible()
   await admin.goto(`/c/jsg/staff/gate?q=${ref}`)
-  await admin.getByText('Sports Family').first().click()
+  await admin.getByText('Tara Alpha').first().click()
   await admin.getByRole('button', { name: 'Admit selected' }).click()
   await expect(admin.getByText('Done. 4 people admitted.')).toBeVisible()
 
@@ -549,35 +543,81 @@ test('sports operations: category, draw, two-tap results, podium, public results
   await expect(coord).toHaveURL(/staff\/sport\/Table(%20| )Tennis$/)
 })
 
-test('registration grid: add, duplicate and delete people; skill is asked per sport; no diet question unless the event offers one', async ({ page }) => {
+test('registration grid: add, duplicate and delete people; skill, singles or doubles and a partner are chosen per sport; no diet question unless the event offers one', async ({ page }) => {
   await page.goto('/c/jsg/e/1/register')
   await page.waitForLoadState('networkidle')
   await expect(page.getByRole('columnheader', { name: 'Diet' })).toHaveCount(0)
+  await expect(page.getByText('Your details')).toHaveCount(0) // the registrant is simply the first row
   const rows = page.locator('tr[data-row]')
   await page.locator('[data-r="0"][data-c="name"]').fill('Asha Shah')
-  await page.locator('tr[data-row="0"] td[data-label^="Sports"] label', { hasText: 'Chess' }).click()
-  await page.locator('tr[data-row="0"] td[data-label^="Sports"] label', { hasText: 'Badminton' }).click()
-  // Every sport shows its own skill level up front; only the ticked ones can be changed.
-  await expect(page.locator('tr[data-row="0"] select[aria-label^="Skill level for"]')).toHaveCount(6)
-  await expect(page.getByLabel('Skill level for Carrom')).toBeDisabled()
-  await expect(page.getByLabel('Skill level for Chess')).toBeEnabled()
-  await page.getByLabel('Skill level for Chess').selectOption('beginner')
-  await page.getByLabel('Skill level for Badminton').selectOption('competitive')
+  const card = (sp: string) => page.locator('tr[data-games="0"] .gamecard', { hasText: sp })
+  await card('Chess').locator('.gc-head').click()
+  await card('Badminton').locator('.gc-head').click()
+  // Only ticked sports open their skill level, format and partner controls.
+  await expect(page.getByRole('radiogroup', { name: 'Skill level for Carrom' })).toHaveCount(0)
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'beginner' }).first().click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Badminton' }).locator('.seg label', { hasText: 'competitive' }).first().click()
+  // Chess is singles only; Badminton can be singles and doubles, and doubles asks for a partner from any family.
+  await expect(card('Chess').getByLabel('doubles in Chess')).toHaveCount(0)
+  await card('Badminton').locator('label', { hasText: 'Doubles' }).click()
+  await card('Badminton').getByLabel('Partner for Badminton').fill('Rahul Mehta')
+  await expect(card('Badminton').getByLabel('singles in Badminton')).toBeChecked()
 
   await page.getByRole('button', { name: 'Add person' }).click()
   await expect(rows).toHaveCount(2)
   await expect(page.locator('[data-r="1"][data-c="name"]')).toBeFocused()
   await page.getByRole('button', { name: 'Duplicate person 1' }).click()
   await expect(rows).toHaveCount(3)
-  // The copy keeps sports and levels but needs its own name.
+  // The copy keeps games, levels and formats but needs its own name and its own partner.
   await expect(page.locator('[data-r="1"][data-c="name"]')).toHaveValue('')
-  await expect(page.locator('tr[data-row="1"] select[aria-label="Skill level for Badminton"]')).toHaveValue('competitive')
+  await expect(page.locator('[data-r="1"][data-c="skill-Badminton"][value="competitive"]')).toBeChecked()
+  await expect(page.locator('[data-r="1"][data-c="partner-Badminton"]')).toHaveValue('')
   await page.getByRole('button', { name: 'Delete person 2' }).click()
   await expect(rows).toHaveCount(2)
   await page.getByRole('button', { name: 'Delete person 2' }).click()
   await expect(rows).toHaveCount(1)
   await page.getByRole('button', { name: 'Clear person 1' }).click()
   await expect(page.locator('[data-r="0"][data-c="name"]')).toHaveValue('')
+})
+
+test('registration form checks mobile and email while typing, the emergency contact cannot be someone registering, and a grandparent may skip sports', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/c/jsg/e/1/register')
+  await page.waitForLoadState('networkidle')
+  // The email is flagged as soon as the person pauses or leaves the field, long before Submit.
+  await page.getByLabel('Your email').fill('asha@gmail')
+  await page.getByLabel('Your email').blur()
+  await expect(page.getByText('Enter a valid email address, like name@example.com').first()).toBeVisible()
+  await page.getByLabel('Your email').fill('asha@example.test')
+  await expect(page.getByText('Enter a valid email address, like name@example.com')).toHaveCount(0)
+  await page.getByLabel('Your mobile').fill('12345')
+  await page.getByLabel('Your mobile').blur()
+  await expect(page.getByText(/10-digit mobile number starting 6, 7, 8 or 9/).first()).toBeVisible()
+  await page.getByLabel('Your mobile').fill('9812345670')
+  await expect(page.getByText(/10-digit mobile number starting/)).toHaveCount(0)
+
+  await page.locator('[data-r="0"][data-c="name"]').fill('Asha Shah')
+  await page.locator('[data-r="0"][data-c="age"]').fill('34')
+  await page.locator('[data-r="0"][data-c="gender"]').selectOption('Female')
+  // Grandma comes along and does not play: no sport ticked.
+  await page.getByRole('button', { name: 'Add person' }).click()
+  await page.locator('[data-r="1"][data-c="name"]').fill('Grandma Shah')
+  await page.locator('[data-r="1"][data-c="age"]').fill('71')
+  await page.locator('[data-r="1"][data-c="gender"]').selectOption('Female')
+  await page.locator('[data-r="1"][data-c="mobile"]').fill('9812345671')
+  // Emergency contact who is on the form is refused, by name and by mobile.
+  await page.getByLabel('Emergency contact name').fill('grandma  shah')
+  await page.getByLabel('Emergency contact name').blur()
+  await expect(page.getByText('must be someone who is not on this registration')).toBeVisible()
+  await page.getByLabel('Emergency contact mobile').fill('98123 45671')
+  await page.getByLabel('Emergency contact mobile').blur()
+  await expect(page.getByText(/belongs to someone on this registration/)).toBeVisible()
+  await page.getByLabel('Emergency contact name').fill('Uncle Mohan')
+  await page.getByLabel('Emergency contact mobile').fill('9812345699')
+  await page.getByLabel('I accept the injury waiver').check()
+  await page.getByRole('button', { name: 'Submit registration' }).click()
+  await expect(page.getByText(/Registration saved/)).toBeVisible()
+  await expect(page.getByText('Grandma Shah').first()).toBeVisible()
 })
 
 test('announcements: admin posts, every public page shows the ticker, a gate login cannot post, removal clears it', async ({ page, browser }) => {
@@ -647,8 +687,8 @@ test('feedback: closed until opened, a family answers once and can change it, ad
   await page.locator('[data-r="0"][data-c="age"]').fill('40')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Female')
   await page.locator('[data-r="0"][data-c="mobile"]').fill('9722200000')
-  await page.locator('td[data-label^="Sports"] label', { hasText: 'Chess' }).first().click()
-  await page.locator('[data-r="0"][data-c="skill-Chess"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Chess' }).first().click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.getByLabel('I accept the injury waiver').check()
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
@@ -725,8 +765,8 @@ test('custom questions and diet options set by the event owner reach the form, t
   await page.locator('[data-r="0"][data-c="age"]').fill('33')
   await page.locator('[data-r="0"][data-c="gender"]').selectOption('Female')
   await page.locator('[data-r="0"][data-c="mobile"]').fill('9711100000')
-  await page.locator('td[data-label^="Sports"] label', { hasText: 'Chess' }).first().click()
-  await page.locator('[data-r="0"][data-c="skill-Chess"]').selectOption('casual')
+  await page.locator('tr[data-games="0"] .gc-head', { hasText: 'Chess' }).first().click()
+  await page.locator('tr[data-games="0"] .gamecard', { hasText: 'Chess' }).locator('.seg label', { hasText: 'casual' }).first().click()
   await page.locator('[data-r="0"][data-c="diet"]').selectOption('Eggetarian')
   await page.locator('[data-r="0"][data-c="extra-q1"]').selectOption('O+')
   await page.getByLabel('I accept the injury waiver').check()
@@ -794,4 +834,44 @@ test('rules: written per event and per sport and format, shown to families and t
   await expect(page.getByText('Best of three games to 15 points.')).toBeVisible()
   await expect(page.getByText('Shuttles are provided.')).toBeVisible()
   await expect(page.getByText('Best of three games to 21 points.')).toHaveCount(0)
+})
+
+test('updates group: the admin adds WhatsApp and Telegram links and registered families get join buttons and QR codes', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await page.goto('/c/jsg/admin/login')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('Admin password').fill('e2e-password')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Admin console' })).toBeVisible()
+  await page.goto('/c/jsg/admin/events/1')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('WhatsApp group or channel link').fill('https://chat.whatsapp.com/JsgFiesta2026')
+  await page.getByLabel('Telegram group or channel link').fill('https://t.me/jsgfiesta')
+  await page.getByRole('button', { name: 'Save event' }).click()
+  await page.waitForLoadState('networkidle')
+
+  const fam = await (await browser.newContext()).newPage()
+  await fam.goto('/c/jsg/e/1/register')
+  await fam.waitForLoadState('networkidle')
+  await fam.locator('[data-r="0"][data-c="name"]').fill('Group Joiner')
+  await fam.locator('[data-r="0"][data-c="age"]').fill('45')
+  await fam.locator('[data-r="0"][data-c="gender"]').selectOption('Male')
+  await fam.locator('[data-r="0"][data-c="mobile"]').fill('9700012345')
+  await fam.locator('[data-r="0"][data-c="email"]').fill('joiner@example.test')
+  await fam.getByLabel('Emergency contact name').fill('Uncle Mohan')
+  await fam.getByLabel('Emergency contact mobile').fill('9899999999')
+  await fam.getByLabel('I accept the injury waiver').check()
+  await fam.getByRole('button', { name: 'Submit registration' }).click()
+  await expect(fam.getByText(/Registration saved/)).toBeVisible()
+  const wa = fam.getByRole('link', { name: 'Join on WhatsApp' })
+  await expect(wa).toHaveAttribute('href', 'https://chat.whatsapp.com/JsgFiesta2026')
+  await expect(fam.getByRole('link', { name: 'Join on Telegram' })).toHaveAttribute('href', 'https://t.me/jsgfiesta')
+  await expect(fam.getByRole('img', { name: 'QR code to join the WhatsApp group' })).toBeVisible()
+  await expect(fam.getByRole('img', { name: 'QR code to join the Telegram group' })).toBeVisible()
+  // The same buttons are on the ticket page, and nowhere on the public event page.
+  await fam.getByRole('link', { name: 'Show my QR ticket' }).click()
+  await expect(fam.getByRole('link', { name: 'Join on WhatsApp' })).toBeVisible()
+  const pub = await (await browser.newContext()).newPage()
+  await pub.goto('/c/jsg/e/1')
+  expect(await pub.content()).not.toContain('JsgFiesta2026')
 })

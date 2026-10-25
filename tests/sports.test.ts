@@ -17,18 +17,20 @@ let comp = 0
 
 const nameOf = (i: number) => `Player ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? String.fromCharCode(65 + Math.floor(i / 26)) : ''}`
 
-type Spec = { age?: number; gender?: 'Male' | 'Female'; skill?: string; sports?: string[]; arrive?: boolean; cancel?: boolean }
+type Spec = { formats?: string[]; partner?: string; name?: string; age?: number; gender?: 'Male' | 'Female'; skill?: string; sports?: string[]; arrive?: boolean; cancel?: boolean }
 /** Registers one person per registration and (by default) checks them in. Returns participant ids in order. */
 function players(n: number, spec: (i: number) => Spec = () => ({})): number[] {
   const out: number[] = []
   for (let i = 0; i < n; i++) {
     const s = spec(i)
-    const r = repo.createRegistration(ev, { ...contact, submissionKey: `seed-${comp}-${i}-${Math.random()}` }, [{
-      ...blankRow(), name: nameOf(i), age: String(s.age ?? 30), gender: s.gender ?? (i % 2 ? 'Female' : 'Male'), mobile: '9876543210', sports: s.sports ?? ['Chess'], skill: s.skill ?? 'casual',
-    }])
+    const age = s.age ?? 30
+    // A child cannot register alone: an adult who is not playing goes in the first row.
+    const guardian = { ...blankRow(), name: `Guardian ${nameOf(i)}`, age: '40', gender: 'Male' as const, mobile: '9876543211' }
+    const child = { ...blankRow(), name: s.name ?? nameOf(i), age: String(age), gender: s.gender ?? (i % 2 ? 'Female' : 'Male'), mobile: age >= 18 ? '9876543210' : '', sports: s.sports ?? ['Chess'], skill: s.skill ?? 'casual', ...(s.formats ? { formats: Object.fromEntries((s.sports ?? ['Chess']).map((sp) => [sp, s.formats!])) } : {}), ...(s.partner ? { partners: Object.fromEntries((s.sports ?? ['Chess']).map((sp) => [sp, s.partner!])) } : {}) }
+    const r = repo.createRegistration(ev, { ...contact, submissionKey: `seed-${comp}-${i}-${Math.random()}` }, age >= 18 ? [child] : [guardian, child])
     if (!r.ok) throw new Error('setup ' + JSON.stringify(r))
     const reg = repo.getRegistrationByToken(r.token)!
-    const [p] = repo.listParticipantsOfRegistration(jsg.id, reg.id)
+    const p = repo.listParticipantsOfRegistration(jsg.id, reg.id).find((x) => x.name === (s.name ?? nameOf(i)))!
     if (s.arrive !== false) repo.checkIn(jsg.id, [p.id], 'Gate', 'Main gate')
     if (s.cancel) repo.cancelRegistration(ev, reg, 'admin')
     out.push(p.id)
@@ -383,5 +385,44 @@ describe('publishing and scheduling', () => {
     expect(ops.createCompetition(jsg.id, { eventId: ev.id, sport: 'Chess', name: '  ', format: 'knockout', entryType: 'singles' }, 'c').ok).toBe(false)
     expect(ops.createCompetition(jsg.id, { eventId: ev.id, sport: 'Chess', name: 'X', format: 'knockout', entryType: 'singles', minAge: 40, maxAge: 20 }, 'c').ok).toBe(false)
     expect(ops.createCompetition(jsg.id, { eventId: 9999, sport: 'Chess', name: 'X', format: 'knockout', entryType: 'singles' }, 'c').ok).toBe(false)
+  })
+})
+
+
+describe('how people said they play, partners and teams across families', () => {
+  it('a doubles category offers only people who opted into doubles, a singles one only singles', () => {
+    const ids = players(4, (i) => ({ sports: ['Badminton'], formats: i === 0 ? ['singles'] : i === 1 ? ['doubles'] : ['singles', 'doubles'] }))
+    const d = newComp({ sport: 'Badminton', entryType: 'doubles', name: 'Doubles' })
+    const s1 = newComp({ sport: 'Badminton', entryType: 'singles', name: 'Singles' })
+    expect(ops.eligiblePlayers(jsg.id, ops.getCompetition(jsg.id, d)!).map((p) => p.id)).toEqual(ids.slice(1))
+    expect(ops.eligiblePlayers(jsg.id, ops.getCompetition(jsg.id, s1)!).map((p) => p.id)).toEqual([ids[0], ids[2], ids[3]])
+  })
+  it('a partner named by name or by the other family\'s reference becomes a pair suggestion, across families', () => {
+    const ids = players(4, (i) => ({
+      sports: ['Badminton'], name: ['Asha Mehta', 'Bina Shah', 'Chetan Rao', 'Dev Patel'][i], formats: ['doubles'],
+      partner: i === 0 ? 'bina  shah' : i === 1 ? 'Asha Mehta' : i === 2 ? 'Nobody Here' : undefined,
+    }))
+    const c = newComp({ sport: 'Badminton', entryType: 'doubles', name: 'Doubles' })
+    const comp = ops.getCompetition(jsg.id, c)!
+    const decl = ops.declaredPartners(jsg.id, comp)
+    expect(decl.map((d) => [d.from.name, d.to?.name ?? null])).toEqual([['Asha Mehta', 'Bina Shah'], ['Bina Shah', 'Asha Mehta'], ['Chetan Rao', null]])
+    expect(decl[2].problem).toMatch(/no arrived player/)
+    const s = ops.suggestPairs(jsg.id, comp)
+    expect(s[0]).toMatchObject({ reason: 'mutual' })
+    expect([s[0].a.id, s[0].b.id].sort()).toEqual([ids[0], ids[1]].sort())
+    expect(ops.listEntries(jsg.id, c)).toHaveLength(0) // proposals only
+    // The partner can also be given as the other registration's HR reference.
+    const ref = repo.listRows(jsg.id, ev.id).find((r) => r.name === 'Dev Patel')!.reg_ref
+    expect(ref).toMatch(/^HR-/)
+  })
+  it('players who gave the same team name form a suggested team even from different families', () => {
+    players(5, (i) => ({ sports: ['Cricket'], name: `Player ${'ABCDE'[i]}`, formats: ['team'], partner: i < 3 ? 'Lotus XI' : i === 3 ? 'Solo FC' : undefined }))
+    const c = newComp({ sport: 'Cricket', entryType: 'team', teamSize: 11, name: 'Teams' })
+    const g = ops.suggestTeams(jsg.id, ops.getCompetition(jsg.id, c)!)
+    expect(g).toHaveLength(1)
+    expect(g[0]).toMatchObject({ name: 'Lotus XI', tooMany: false })
+    expect(g[0].players.map((p) => p.name)).toEqual(['Player A', 'Player B', 'Player C'])
+    ok(ops.addEntry(jsg.id, c, g[0].players.map((p) => p.id), 'coord', g[0].name))
+    expect(ops.suggestTeams(jsg.id, ops.getCompetition(jsg.id, c)!)).toEqual([])
   })
 })

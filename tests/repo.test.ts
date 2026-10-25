@@ -11,7 +11,7 @@ import { blankRow, type ParticipantInput } from '@/lib/registration/rules'
 import { buildWorkbook } from '@/lib/export'
 import { checkSession, makeSession, verifyPassword, hashPassword } from '@/lib/auth'
 
-const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Raj', emergencyMobile: '9123456780', waiver: true as const }
+const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Uncle Mohan', emergencyMobile: '9123456780', waiver: true as const }
 const person = (o: Partial<ParticipantInput> = {}): ParticipantInput => ({ ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '9876543210', sports: ['Chess'], skill: 'casual', ...o })
 
 let jsg: NonNullable<ReturnType<typeof repo.getCommunityBySlug>>
@@ -36,9 +36,25 @@ describe('registration lifecycle', () => {
     expect(repo.listRows(jsg.id, ev.id).every((p) => p.registered_at)).toBe(true)
   })
   it('rejects invalid rows with per-row errors and stores nothing', () => {
-    const r = repo.createRegistration(ev, contact, [person(), person({ name: '', sports: [] })])
-    expect(r).toMatchObject({ ok: false, rowErrors: { 1: { name: 'Required', sports: 'Pick at least one sport' } } })
+    const r = repo.createRegistration(ev, contact, [person(), person({ name: '', sports: ['Golf'] })])
+    expect(r).toMatchObject({ ok: false, rowErrors: { 1: { name: 'Required', sports: 'Unknown sport' } } })
     expect(repo.listRows(jsg.id, ev.id)).toHaveLength(0)
+  })
+  it('picking a sport is optional: a grandparent can come and not play', () => {
+    const r = repo.createRegistration(ev, contact, [person(), person({ name: 'Grandma Shah', age: '70', sports: [], skill: '' })])
+    expect(r.ok).toBe(true)
+    const rows = repo.listRows(jsg.id, ev.id)
+    expect(rows.find((x) => x.name === 'Grandma Shah')!.sportList).toEqual([])
+  })
+  it('the emergency contact cannot be someone on the registration, by name or by mobile', () => {
+    const a = repo.createRegistration(ev, { ...contact, emergencyName: ' raj  SHARMA ' }, [person(), person({ name: 'Raj Sharma' })])
+    expect(a).toMatchObject({ ok: false, contactErrors: { emergencyName: expect.stringContaining('not on this registration') } })
+    const b = repo.createRegistration(ev, { ...contact, emergencyMobile: '98765 43210' }, [person()])
+    expect(b).toMatchObject({ ok: false, contactErrors: { emergencyMobile: expect.stringContaining('belongs to someone') } })
+  })
+  it('the first row is the person registering, so they must be an adult', () => {
+    expect(repo.createRegistration(ev, contact, [person({ name: 'Kid', age: '12', mobile: '' })])).toMatchObject({ ok: false, rowErrors: { 0: { age: expect.stringContaining('18 or older') } } })
+    expect(repo.createRegistration(ev, contact, [person(), person({ name: 'Kid', age: '12', mobile: '' })]).ok).toBe(true)
   })
   it('refuses non-English names on the server too', () => {
     expect(repo.createRegistration(ev, contact, [person({ name: 'આશા' })])).toMatchObject({ ok: false, rowErrors: { 0: { name: 'Use English letters only' } } })

@@ -25,7 +25,7 @@ import { allow } from '@/lib/ratelimit'
 import { blankRow, normalizeMobile, suggestEmail, eventSettings } from '@/lib/registration/rules'
 
 const good = { ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '9876543210', sports: ['Chess'], skill: 'casual' }
-const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Raj', emergencyMobile: '9123456780', waiver: true as const }
+const contact = { registrantName: 'Asha Shah', registrantMobile: '9876543210', registrantEmail: 'asha@example.test', emergencyName: 'Uncle Mohan', emergencyMobile: '9123456780', waiver: true as const }
 
 let jsg: NonNullable<ReturnType<typeof repo.getCommunityBySlug>>
 let ev: repo.EventRow
@@ -41,7 +41,6 @@ beforeEach(() => {
 describe('malformed requests never crash the server', () => {
   const bad: [string, unknown, unknown][] = [
     ['sports is a string', [{ ...good, sports: 'Chess' }], contact],
-    ['sports missing key', [{ ...good, sports: undefined }], contact], // missing arrays default to empty and fail validation
     ['row is null', [null], contact],
     ['rows is not an array', 'abc', contact],
     ['rows is an object', { 0: good }, contact],

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { sportFormats } from '../sports'
 
 export const GENDERS = ['Male', 'Female'] as const
 export const KINDS = ['member', 'guest'] as const
@@ -46,6 +47,10 @@ export function columnConfig(raw: string | null | undefined): ColumnConfig {
 }
 
 /** English only for the MVP: Latin letters, spaces and . ' - so every admin and coordinator can read every name. */
+export const PARTNER_TEXT = /^[A-Za-z0-9][A-Za-z0-9 .'’-]{0,59}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
+/** The same check in the browser while typing and on the server at submit. */
+export const isEmail = (v: string) => EMAIL_RE.test(v.trim()) && z.email().safeParse(v.trim()).success
 export const ENGLISH_NAME = /^[A-Za-z][A-Za-z .'’-]*$/
 const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
@@ -76,8 +81,29 @@ export function rulesFor(rules: EventRules, sport: string, entryType?: 'singles'
   return out
 }
 
+export type GroupLinks = { whatsapp: string; telegram: string }
+const GROUP_HOSTS: Record<keyof GroupLinks, string[]> = {
+  whatsapp: ['chat.whatsapp.com', 'whatsapp.com', 'www.whatsapp.com', 'wa.me'],
+  telegram: ['t.me', 'telegram.me', 'telegram.dog'],
+}
+/** A group or channel invite link, only from the messaging app's own domain and only over https. Anything else becomes empty. */
+export function groupLink(kind: keyof GroupLinks, raw: unknown): string {
+  const text = String(raw ?? '').trim()
+  if (!text || text.length > 300) return ''
+  try {
+    const u = new URL(text)
+    if (u.protocol !== 'https:' || u.username || u.password || !GROUP_HOSTS[kind].includes(u.hostname.toLowerCase())) return ''
+    if (u.pathname.length < 2) return ''
+    return u.toString()
+  } catch { return '' }
+}
+export function parseGroups(v: unknown): GroupLinks {
+  const o = (v ?? {}) as Record<string, unknown>
+  return { whatsapp: groupLink('whatsapp', o.whatsapp), telegram: groupLink('telegram', o.telegram) }
+}
+
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[]; questions: Question[]; rules: EventRules }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[]; questions: Question[]; rules: EventRules; groups: GroupLinks }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -95,18 +121,20 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
   const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
   const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
   // Required unless an admin switches it off: the emailed link is how a family gets back to its registration.
-  return { rules: parseRules(c.rules), questions: parseQuestions(c.questions), diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  return { groups: parseGroups(c.groups), rules: parseRules(c.rules), questions: parseQuestions(c.questions), diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
-const mobile = z.string().transform(normalizeMobile).refine((v) => /^\d{10}$/.test(v), 'Enter a 10-digit mobile number')
+/** Indian mobile numbers are ten digits starting 6 to 9. */
+export const isMobile = (v: string) => /^[6-9]\d{9}$/.test(normalizeMobile(v))
+const mobile = z.string().transform(normalizeMobile).refine((v) => /^[6-9]\d{9}$/.test(v), 'Enter a 10-digit mobile number starting 6, 7, 8 or 9')
 
 export type ParticipantInput = {
   name: string; age: string | number; gender: string; mobile: string; email: string; sports: string[]
-  skill: string; skills: Record<string, string>; extra: Record<string, string>; diet: string; tshirt: string; accessibility: string; kind: string
+  skill: string; skills: Record<string, string>; formats: Record<string, string[]>; partners: Record<string, string>; extra: Record<string, string>; diet: string; tshirt: string; accessibility: string; kind: string
 }
 export const blankRow = (): ParticipantInput => ({
-  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', skills: {}, extra: {}, diet: '',
+  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', skills: {}, formats: {}, partners: {}, extra: {}, diet: '',
   tshirt: '', accessibility: '', kind: 'member',
 })
 
@@ -128,14 +156,14 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
   if (row.mobile.trim() || adult) {
     const r = mobile.safeParse(row.mobile)
     if (r.success) phone = r.data
-    else errors.mobile = adult && !row.mobile.trim() ? 'Required for adults' : 'Enter a 10-digit mobile number'
+    else errors.mobile = adult && !row.mobile.trim() ? 'Required for adults' : /[A-Za-z]/.test(row.mobile) ? 'Mobile numbers have digits only' : 'Enter a 10-digit mobile number starting 6, 7, 8 or 9'
   }
   const email = row.email.trim()
-  if (email && !z.email().safeParse(email).success) errors.email = 'Invalid email'
+  if (email && !isEmail(email)) errors.email = 'Enter a valid email address, like name@example.com'
   if (cols.email.show && cols.email.required && !email) errors.email = 'Required'
-  if (!row.sports.length) errors.sports = 'Pick at least one sport'
-  else if (row.sports.some((s) => !eventSports.includes(s))) errors.sports = 'Unknown sport'
-  else if (!errors.age) {
+  // Sports are optional: a grandparent can come with the family and not play.
+  if (row.sports.some((s) => !eventSports.includes(s))) errors.sports = 'Unknown sport'
+  else if (row.sports.length && !errors.age) {
     for (const sp of row.sports) {
       const lim = ages[sp]
       if (lim && ((lim.min && age < lim.min) || (lim.max && age > lim.max))) {
@@ -151,6 +179,18 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
     if (lvl && !SKILLS.includes(lvl as never)) errors.skill = 'Choose a level'
     else if (!lvl && cols.skill.show && cols.skill.required && !errors.skill) errors.skill = row.sports.length > 1 ? 'Choose a level for each sport' : 'Choose a level'
     skills[sp] = lvl
+  }
+  // How each sport is played: no choice means open to every format the sport allows. A partner or team name only makes sense for doubles or team play.
+  const formats: Record<string, string[]> = {}, partners: Record<string, string> = {}
+  for (const sp of row.sports) {
+    const allowed = sportFormats(sp) as string[]
+    const picked = (row.formats?.[sp] ?? []).filter((f) => allowed.includes(f))
+    formats[sp] = picked.length ? [...new Set(picked)] : allowed
+    const text = String(row.partners?.[sp] ?? '').replace(/\s+/g, ' ').trim()
+    if (text && (formats[sp].includes('doubles') || formats[sp].includes('team'))) {
+      if (!PARTNER_TEXT.test(text)) errors.partners = `${sp}: partner or team name needs English letters only`
+      else partners[sp] = text
+    }
   }
   const diet = cols.diet.show && diets.length ? row.diet : ''
   if (diet && !diets.includes(diet)) errors.diet = 'Choose a diet'
@@ -172,7 +212,7 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
     errors,
     value: ok
       ? { name, age, gender: row.gender as 'Male' | 'Female', mobile: phone, email, sports: [...new Set(row.sports)],
-          skill: bestSkill(Object.values(skills)), skills, extra, diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
+          skill: bestSkill(Object.values(skills)), skills, formats, partners, extra, diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
           kind: row.kind as 'member' | 'guest' }
       : null,
   }
@@ -184,7 +224,7 @@ const text = (max: number) => z.string().max(max).default('')
 /** Shape guard for anything arriving from a browser: wrong types or oversized values are rejected before any rule runs. */
 export const rowShape = z.object({
   name: text(200), age: z.union([z.string().max(10), z.number()]).transform((v) => String(v)).default(''), gender: text(20), mobile: text(30), email: text(200),
-  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), skills: z.record(z.string().max(60), z.string().max(20)).default({}), extra: z.record(z.string().max(10), z.string().max(300)).default({}), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
+  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), skills: z.record(z.string().max(60), z.string().max(20)).default({}), formats: z.record(z.string().max(60), z.array(z.string().max(12)).max(4)).default({}), partners: z.record(z.string().max(60), z.string().max(80)).default({}), extra: z.record(z.string().max(10), z.string().max(300)).default({}), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
 })
 export const submissionShape = z.object({
   rows: z.array(rowShape).max(200),
@@ -252,4 +292,36 @@ export function skillsOf(p: { skills?: string; skill: string; sports: string }):
 
 export function extraOf(p: { extra?: string }): Record<string, string> {
   try { return JSON.parse(p.extra || '{}') } catch { return {} }
+}
+
+const norm = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim()
+/** The emergency contact must be someone who is not coming: not one of the people on this registration, by name or by mobile. */
+export function emergencyConflicts(emergencyName: string, emergencyMobile: string, people: { name: string; mobile: string }[]): { emergencyName?: string; emergencyMobile?: string } {
+  const out: { emergencyName?: string; emergencyMobile?: string } = {}
+  const n = norm(emergencyName), m = normalizeMobile(emergencyMobile)
+  if (n && people.some((p) => norm(p.name) === n)) out.emergencyName = 'The emergency contact must be someone who is not on this registration'
+  if (m && people.some((p) => p.mobile && normalizeMobile(p.mobile) === m)) out.emergencyMobile = 'This mobile belongs to someone on this registration. Give another person\'s number'
+  return out
+}
+
+/** Row one is the person registering: an adult we can reach. */
+export function registrantProblems(row: { name: string; age: string | number; mobile: string; email: string }, emailRequired: boolean): { name?: string; age?: string; mobile?: string; email?: string } {
+  const out: { name?: string; age?: string; mobile?: string; email?: string } = {}
+  if (Number(row.age) > 0 && Number(row.age) < 18) out.age = 'The person registering must be 18 or older. Put an adult in the first row'
+  if (!isMobile(row.mobile)) out.mobile = row.mobile.trim() ? 'Enter a 10-digit mobile number starting 6, 7, 8 or 9' : 'Required: organisers call this number'
+  if (!row.email.trim()) { if (emailRequired) out.email = 'Required: your ticket link is sent here' }
+  else if (!isEmail(row.email)) out.email = 'Enter a valid email address, like name@example.com'
+  return out
+}
+
+/** Level, format and partner per sport for a stored participant. */
+export function formatsOf(p: { formats?: string; sports: string }): Record<string, string[]> {
+  let m: Record<string, string[]> = {}
+  try { m = JSON.parse(p.formats || '{}') } catch { /* fall back */ }
+  const out: Record<string, string[]> = {}
+  for (const sp of JSON.parse(p.sports || '[]') as string[]) out[sp] = m[sp]?.length ? m[sp] : (sportFormats(sp) as string[])
+  return out
+}
+export function partnersOf(p: { partners?: string }): Record<string, string> {
+  try { return JSON.parse(p.partners || '{}') } catch { return {} }
 }
