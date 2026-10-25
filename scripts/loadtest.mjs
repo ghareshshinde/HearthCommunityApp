@@ -18,7 +18,9 @@ await page.locator('[data-r="0"][data-c="name"]').fill('Probe Person'); await pa
 await page.locator('[data-r="0"][data-c="mobile"]').fill('9000000001'); await page.locator('td[data-label="Sports"] label', { hasText: 'Chess' }).first().click()
 await page.locator('[data-r="0"][data-c^="skill-"]').first().selectOption('casual'); await page.getByLabel('I accept the injury waiver').check()
 await page.getByRole('button', { name: 'Submit registration' }).click(); await page.waitForURL(/\/r\//)
+const probeUrl = page.url().split('?')[0]
 await browser.close()
+console.log(`Probe registration saved. After a restart this link must still open: ${probeUrl}`)
 if (!captured) throw new Error('could not capture the submission')
 
 const skip = new Set(['content-length', 'host', 'connection', 'cookie'])

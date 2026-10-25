@@ -78,6 +78,19 @@ echo $URL
 **7. Open it**: `URL/c/jsg` is the public site and `URL/c/jsg/admin` is the admin sign-in (the password from step 3).
 Then create the event in the admin console: New event, check the sports and dates, set Status to Published.
 
+**8. Check it before the event** (5 minutes, from any computer with Node 22: `git clone` the repo, `npm ci`)
+```bash
+npx playwright install chromium     # once
+node scripts/loadtest.mjs $URL 300 300
+```
+It saves 300 test families at once and prints a "probe" link. Expect `"failed": 0`. Then prove the data survives a restart:
+```bash
+gcloud run services update hearth --region $REGION --update-env-vars RESTARTED_AT=$(date +%s)
+curl -s -o /dev/null -w '%{http_code}\n' PROBE-LINK-FROM-ABOVE      # must print 200
+```
+Afterwards remove the test families: Admin > Registrations, select all rows (filter by name "Family"), Cancel, or start the real event on a fresh bucket object (set `GCS_OBJECT=hearth/event.db`).
+Also on two phones: open `URL/c/jsg/staff/login`, sign in as a gate login, tap Scan and scan a ticket from `URL/c/jsg/t/...`.
+
 **Email (later, when ready)**: add `SMTP_URL`, `EMAIL_FROM` and `NOTIFY_COPY_TO` with
 `gcloud run services update hearth --region $REGION --update-env-vars EMAIL_FROM='JSG Hyderabad <jsghyd@gmail.com>',NOTIFY_COPY_TO=jsghyd@gmail.com`
 and put the SMTP URL (it contains a password) in Secret Manager:
