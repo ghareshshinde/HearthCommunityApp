@@ -29,7 +29,14 @@ export function ensureBootstrap() {
   const pw = process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? null : 'change-me')
   if (!pw) throw new Error('Set ADMIN_PASSWORD to create the first community in production')
   const mk = db().prepare('insert into community (slug,name,type,city,about,admin_hash) values (?,?,?,?,?,?)')
-  mk.run('jsg', 'JSG Hyderabad', 'trust', 'Hyderabad', 'Demo tenant for the Sports Fiesta.', hashPassword(pw))
+  mk.run('jsg', 'JSG Hyderabad', 'trust', 'Hyderabad', 'Jain Social Groups International Federation. Demo tenant for the Sports Fiesta.', hashPassword(pw))
+  // Colours taken from the JSG logo: royal blue and gold. Gold is a fill colour only (it fails contrast as text).
+  db().prepare("update community set branding = ? where slug = 'jsg'").run(JSON.stringify({
+    name: 'JSG Hyderabad', tagline: 'Grow more to Serve more',
+    colors: { primary: '#1e4a9e', secondary: '#17387a', accent: '#f2b705', background: '#f5f8fd', surface: '#ffffff',
+      textPrimary: '#0f172a', textSecondary: '#475569', border: '#cbd5e1', link: '#1e4a9e' },
+    darkColors: null,
+  }))
   mk.run('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', hashPassword(pw))
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_EVENT === 'true') {
     const jsg = one<{ id: number }>("select id from community where slug = 'jsg'")!.id
