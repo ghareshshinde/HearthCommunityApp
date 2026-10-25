@@ -11,6 +11,12 @@ Production: set `ADMIN_PASSWORD` and `SESSION_SECRET` (see `.env.example`), moun
 `docker build -t hearth . && docker run -p 3000:3000 -v hearth-data:/data -e ADMIN_PASSWORD=... -e SESSION_SECRET=... hearth`
 SQLite means a single instance with a persistent disk (Fly volume, Railway volume, a VPS). It will not work on Vercel's ephemeral filesystem.
 
+## Google Cloud (Cloud Run)
+The app saves a snapshot to a Cloud Storage bucket after every change and restores it on start, so it works without a persistent disk. Run one instance. Steps, settings and checks are in [docs/DEPLOY_GOOGLE_CLOUD.md](docs/DEPLOY_GOOGLE_CLOUD.md).
+
+## Admin sign-in
+`/c/<slug>/admin` with the single admin password (`ADMIN_PASSWORD` the first time the database is created, `change-me` in development). Change it under Admin > Change password. Forgotten: start once with `RESET_ADMIN_PASSWORD=true` and a new `ADMIN_PASSWORD`.
+
 ## Checks
 `npm run typecheck && npm run lint && npm test` then `npm run e2e` (set `PW_CHROMIUM=/path/to/chromium` if the bundled browser is missing).
 

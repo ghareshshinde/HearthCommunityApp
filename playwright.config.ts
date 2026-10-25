@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test'
 
-const env = { DATABASE_PATH: './data/e2e.db', ADMIN_PASSWORD: 'e2e-password', SESSION_SECRET: 'e2e-secret', NODE_ENV: 'production', SEED_DEMO_EVENT: 'true' }
+const env = { PORT: '3000', DATABASE_PATH: './data/e2e.db', ADMIN_PASSWORD: 'e2e-password', SESSION_SECRET: 'e2e-secret', NODE_ENV: 'production', SEED_DEMO_EVENT: 'true' }
 export default defineConfig({
   testDir: 'e2e',
   workers: 1,

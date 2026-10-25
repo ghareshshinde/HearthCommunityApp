@@ -6,6 +6,8 @@ import { headers } from 'next/headers'
 import { checkSession, makeSession, verifyPassword } from '@/lib/auth'
 import { cookieName } from '@/lib/session'
 import * as repo from '@/lib/repo'
+import { persist } from '@/lib/persist'
+import { hashPassword } from '@/lib/auth'
 import type { Contact, SubmitResult } from '@/lib/repo'
 import type { ParticipantInput } from '@/lib/registration/rules'
 import { brandingOverrideSchema } from '@/lib/branding/tokens'
@@ -24,20 +26,34 @@ export async function submitRegistration(slug: string, eventId: number, contact:
   const c = repo.getCommunityBySlug(slug)
   const ev = c && repo.getEvent(c.id, eventId)
   if (!c || !ev) return { ok: false, error: 'Event not found' }
-  return repo.createRegistration(ev, contact, rows)
+  const r = repo.createRegistration(ev, contact, rows)
+  return r.ok ? savedOrError(r) : r
+}
+
+/** Make the write durable before telling the person it worked (a no-op when no bucket is configured). */
+async function savedOrError<T extends { ok: boolean }>(r: T): Promise<T | { ok: false; error: string }> {
+  try {
+    await persist()
+    return r
+  } catch (e) {
+    console.error('persist failed', e)
+    return { ok: false, error: 'We could not store this safely. Please try again in a minute.' }
+  }
 }
 
 export async function editRegistration(token: string, contact: Contact, rows: ParticipantInput[]): Promise<SubmitResult> {
   const reg = repo.getRegistrationByToken(token)
   const ev = reg && repo.getEvent(reg.community_id, reg.event_id)
   if (!reg || !ev) return { ok: false, error: 'Registration not found' }
-  return repo.updateRegistration(ev, reg, contact, rows)
+  const r = repo.updateRegistration(ev, reg, contact, rows)
+  return r.ok ? savedOrError(r) : r
 }
 
 export async function cancelOwnRegistration(token: string) {
   const reg = repo.getRegistrationByToken(token)
   const ev = reg && repo.getEvent(reg.community_id, reg.event_id)
   if (reg && ev) repo.cancelRegistration(ev, reg, 'public')
+  await persist()
   revalidatePath('/c')
 }
 
@@ -89,6 +105,7 @@ export async function saveEventAction(slug: string, eventId: number | null, form
     status: (['draft', 'published', 'closed'].includes(String(form.get('status'))) ? String(form.get('status')) : 'draft') as 'draft',
   })
   repo.audit(c.id, 'admin', eventId ? 'event.updated' : 'event.created', String(id), { title })
+  await persist()
   redirect(`/c/${slug}/admin/events/${id}`)
 }
 
@@ -97,6 +114,7 @@ export async function editParticipantAction(slug: string, id: number, field: rep
   const c = await adminCtx(slug)
   if (!repo.EDITABLE.includes(field)) return { ok: false as const, error: 'Field not editable' }
   const r = repo.adminEditParticipant(c.id, id, field, value, 'admin')
+  await persist()
   revalidatePath(`/c/${slug}/admin`)
   return r
 }
@@ -106,6 +124,7 @@ export async function bulkActionForm(slug: string, eventId: number, form: FormDa
   if (!['verify', 'unverify', 'confirm', 'cancel', 'member', 'guest', 'promote'].includes(action)) return
   const ids = form.getAll('ids').map(Number).filter(Number.isInteger)
   repo.bulkAction(c.id, ids, action, 'admin')
+  await persist()
   revalidatePath(`/c/${slug}/admin`)
   redirect(`/c/${slug}/admin/events/${eventId}/registrations?${new URLSearchParams(String(form.get('qs') ?? ''))}`)
 }
@@ -125,6 +144,21 @@ export async function saveBrandingAction(slug: string, _prev: { error?: string; 
   }
   repo.saveBranding(c.id, parsed.data)
   repo.audit(c.id, 'admin', 'branding.updated')
+  await persist()
   revalidatePath(`/c/${slug}`)
+  return { ok: true }
+}
+
+// ---------- admin: change password ----------
+export async function changePasswordAction(slug: string, _prev: { error?: string; ok?: boolean } | undefined, form: FormData) {
+  const c = await adminCtx(slug)
+  const current = String(form.get('current') ?? '')
+  const next = String(form.get('next') ?? '')
+  if (!verifyPassword(current, c.admin_hash)) return { error: 'Current password is incorrect' }
+  if (next.length < 10) return { error: 'Use at least 10 characters' }
+  if (next !== String(form.get('confirm') ?? '')) return { error: 'The two new passwords do not match' }
+  repo.setAdminPassword(c.id, hashPassword(next))
+  repo.audit(c.id, 'admin', 'admin.password_changed')
+  await persist()
   return { ok: true }
 }

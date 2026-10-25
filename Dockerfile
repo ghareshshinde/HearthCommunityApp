@@ -7,8 +7,8 @@ RUN npm run build
 
 FROM node:22-slim
 WORKDIR /app
-ENV NODE_ENV=production DATABASE_PATH=/data/hearth.db
+# Cloud Run sets PORT (8080). The database is a local file that is backed up to Cloud Storage when GCS_BUCKET is set.
+ENV NODE_ENV=production PORT=8080 DATABASE_PATH=/data/hearth.db
 COPY --from=build /app ./
-VOLUME /data
-EXPOSE 3000
+EXPOSE 8080
 CMD ["npm", "run", "start"]

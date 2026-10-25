@@ -25,7 +25,7 @@ const all = <T>(sql: string, ...p: (string | number | null)[]) => db().prepare(s
 const one = <T>(sql: string, ...p: (string | number | null)[]) => db().prepare(sql).get(...p) as unknown as T | undefined
 
 export function ensureBootstrap() {
-  if (one<{ n: number }>('select count(*) n from community')!.n > 0) return
+  if (one<{ n: number }>('select count(*) n from community')!.n > 0) return maybeResetAdminPassword()
   const pw = process.env.ADMIN_PASSWORD ?? (process.env.NODE_ENV === 'production' ? null : 'change-me')
   if (!pw) throw new Error('Set ADMIN_PASSWORD to create the first community in production')
   const mk = db().prepare('insert into community (slug,name,type,city,about,admin_hash) values (?,?,?,?,?,?)')
@@ -45,6 +45,19 @@ export function ensureBootstrap() {
       .run(jsg, 'Sports Fiesta (demo)', 'Demo event with fake details. Replace in the admin console.', inDays(30), inDays(30.4), 'Demo Stadium, Hyderabad', 'https://maps.google.com',
         JSON.stringify(['Chess', 'Carrom', 'Cricket', 'Badminton', 'Table Tennis', 'Pickleball']), inDays(25))
   }
+}
+
+export function setAdminPassword(cid: number, hash: string) {
+  db().prepare('update community set admin_hash = ? where id = ?').run(hash, cid)
+}
+
+let resetDone = false
+/** Recovery for a forgotten password: start once with RESET_ADMIN_PASSWORD=true and ADMIN_PASSWORD set, then unset it. */
+function maybeResetAdminPassword() {
+  if (resetDone || process.env.RESET_ADMIN_PASSWORD !== 'true' || !process.env.ADMIN_PASSWORD) return
+  resetDone = true
+  db().prepare('update community set admin_hash = ?').run(hashPassword(process.env.ADMIN_PASSWORD))
+  audit(null, 'system', 'admin.password_reset_from_env')
 }
 
 export function getCommunityBySlug(slug: string) {

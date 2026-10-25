@@ -5,13 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-8080}",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@google-cloud/storage": "^8.4.0",
     "exceljs": "^4.4.0",
     "next": "^16.4.3",
     "next-intl": "^4.14.9",
@@ -30,5 +31,8 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

@@ -16,7 +16,7 @@ export default async function AdminHome({ params }: { params: Promise<{ slug: st
       <h1>Admin console</h1>
       <p>
         <Link className="btn" href={`/c/${slug}/admin/events/new`}>New event</Link>{' '}
-        <Link href={`/c/${slug}/admin/branding`}>Branding</Link> · <Link href={`/c/${slug}/admin/audit`}>Audit log and outbox</Link>{' '}
+        <Link href={`/c/${slug}/admin/branding`}>Branding</Link> · <Link href={`/c/${slug}/admin/audit`}>Audit log and outbox</Link> · <Link href={`/c/${slug}/admin/password`}>Change password</Link> · <a href={`/c/${slug}/admin/backup`}>Download backup</a>{' '}
         <form action={adminLogout.bind(null, slug)} style={{ display: 'inline' }}><button>Sign out</button></form>
       </p>
       {events.map((e) => {
