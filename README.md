@@ -46,3 +46,7 @@ Registrants get a QR ticket (`/c/<slug>/t/<code>`, works offline once opened). A
 ## What is built
 Tenancy by `/c/slug` (and `slug.ROOT_DOMAIN`), branding tokens, English/Hindi/Gujarati scaffold, event admin, tabular registration grid, edit/cancel by secret link, registrations workspace with inline edit, bulk actions, Excel export, dashboard, audit log.
 Not yet built: photos, pairing and results with the podium, live board, feedback, catering and volunteer screens, roster import, full Hindi and Gujarati translations, offline PWA, real email sending.
+
+## Sports operations
+
+Sport admins open `Players > Categories and results` for their sport, create a category, add arrived players, make the draw, publish rounds and tap winners. Event admin can lock results (`/c/jsg/admin/events/1/competitions`). Public winners and brackets: `/c/jsg/e/1/results`.

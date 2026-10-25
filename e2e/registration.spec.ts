@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import ExcelJS from 'exceljs'
 
 test('family of 4 plus 2 guests registers, admin sees and exports them', async ({ page, context }) => {
+  test.setTimeout(90_000) // first test pays the cold-start compile of each route
   await page.goto('/c/jsg')
   await page.getByRole('link', { name: 'Register' }).click()
   await page.getByRole('link', { name: 'Register' }).click()
@@ -426,4 +427,114 @@ test('the registrant email is required, a mistyped domain is flagged, and the fo
   await expect(page.getByLabel(/^Your email/)).toHaveValue('noemail@gmail.com')
   await page.getByRole('button', { name: 'Submit registration' }).click()
   await expect(page.getByText(/Registration saved/)).toBeVisible()
+})
+
+test('sports operations: category, draw, two-tap results, podium, public results, lock, and a sport admin sees only their sport', async ({ page, browser }) => {
+  test.setTimeout(240_000)
+  // Four adults register for Table Tennis in one go (pasted rows), and the admin checks them in at the gate.
+  await page.goto('/c/jsg/e/1/register')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('Your name').fill('Sports Family')
+  await page.getByLabel('Your mobile').fill('9733300000')
+  await page.getByLabel(/^Your email/).fill('sports@example.test')
+  await page.getByLabel('Emergency contact name').fill('Em Contact')
+  await page.getByLabel('Emergency contact mobile').fill('9899999999')
+  const tsv = [
+    ['Tara Alpha', '30', 'Female', '9733300001', '', 'Table Tennis', 'competitive', 'Vegetarian', 'M', '', 'member'],
+    ['Uma Bravo', '31', 'Female', '9733300002', '', 'Table Tennis', 'casual', 'Vegetarian', 'M', '', 'member'],
+    ['Vik Charlie', '32', 'Male', '9733300003', '', 'Table Tennis', 'casual', 'Vegetarian', 'L', '', 'member'],
+    ['Wes Delta', '33', 'Male', '9733300004', '', 'Table Tennis', 'beginner', 'Vegetarian', 'L', '', 'member'],
+  ].map((r) => r.join('\t')).join('\n')
+  await page.locator('[data-r="0"][data-c="name"]').focus()
+  await page.evaluate((text) => {
+    const dt = new DataTransfer(); dt.setData('text', text)
+    document.activeElement!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  }, tsv)
+  await page.getByLabel('I accept the injury waiver').check()
+  await page.getByRole('button', { name: 'Submit registration' }).click()
+  await expect(page.getByText(/Registration saved/)).toBeVisible()
+  const ref = (await page.getByText(/^Reference/).first().textContent())!.match(/HR-[0-9A-F]{8}/)![0]
+
+  const admin = await (await browser.newContext()).newPage()
+  await admin.goto('/c/jsg/admin/login')
+  await admin.waitForLoadState('networkidle')
+  await admin.getByLabel('Admin password').fill('e2e-password')
+  await admin.getByRole('button', { name: 'Sign in' }).click()
+  await expect(admin.getByRole('heading', { name: 'Admin console' })).toBeVisible()
+  await admin.goto(`/c/jsg/staff/gate?q=${ref}`)
+  await admin.getByText('Sports Family').first().click()
+  await admin.getByRole('button', { name: 'Admit selected' }).click()
+  await expect(admin.getByText('Done. 4 people admitted.')).toBeVisible()
+
+  // A category for the sport: singles knockout.
+  await admin.goto('/c/jsg/staff/sport/Table%20Tennis/categories')
+  await admin.waitForLoadState('networkidle')
+  await admin.getByLabel('Name').fill("Open singles")
+  await admin.getByRole('button', { name: 'Create category' }).click()
+  await expect(admin.getByText('Category created')).toBeVisible()
+  // Nobody who has not arrived can be entered: only the four we admitted are offered.
+  await expect(admin.locator('input[name="ids"]')).toHaveCount(4)
+  await admin.getByRole('button', { name: 'Add everyone' }).click()
+  await expect(admin.getByText('Entries (4)')).toBeVisible()
+  await admin.getByRole('button', { name: 'Seed by skill' }).click()
+  await admin.getByRole('button', { name: 'Make the draw' }).first().click()
+  await expect(admin.getByText(/Draw made: 4 matches/)).toBeVisible()
+  await admin.getByRole('button', { name: 'Publish semi-final' }).click()
+  await expect(admin.getByText(/Round 1 is now visible/)).toBeVisible()
+
+  // Two taps per match: tap the winner.
+  const a = admin.locator('button[name="side"][value="a"]')
+  await a.nth(0).click()
+  await expect(admin.getByText('Result saved.')).toBeVisible()
+  await a.nth(1).click()
+  await expect(admin.getByText('Result saved.')).toBeVisible()
+  // Final and third-place match appear; play them.
+  await expect(admin.getByRole('heading', { name: /^Final/ })).toBeVisible()
+  await a.nth(2).click()
+  await expect(admin.getByText('Result saved.')).toBeVisible()
+  await a.nth(3).click()
+  await expect(admin.getByRole('heading', { name: 'Podium' })).toBeVisible()
+  await expect(admin.getByText('1st')).toBeVisible()
+  await expect(admin.getByText('3rd')).toBeVisible()
+
+  // Public results show the winners and the bracket without any sign-in; a name search finds the player.
+  const pub = await (await browser.newContext()).newPage()
+  await pub.goto('/c/jsg/e/1/results')
+  await expect(pub.getByRole('heading', { name: 'Winners' })).toBeVisible()
+  await expect(pub.getByText('Table Tennis: Open singles').first()).toBeVisible()
+  await pub.goto('/c/jsg/e/1/results?q=tara')
+  await expect(pub.getByText(/Matches for/)).toBeVisible()
+  await expect(pub.getByText('Tara Alpha').first()).toBeVisible()
+  expect(await pub.content()).not.toMatch(/9733300001|sports@example\.test/)
+
+  // The admin locks the category: result buttons stop working until reopened.
+  admin.on('dialog', (d) => d.accept())
+  await admin.goto('/c/jsg/admin/events/1/competitions')
+  await admin.locator('tr', { hasText: 'Open singles' }).getByRole('button', { name: 'Lock' }).click()
+  await expect(admin.locator('tr', { hasText: 'Open singles' }).getByText('locked')).toBeVisible()
+  await admin.goto('/c/jsg/staff/sport/Table%20Tennis/categories')
+  await admin.getByRole('link', { name: /Open singles/ }).click()
+  await expect(admin.getByText('Results are locked by the event admin.')).toBeVisible()
+  await expect(admin.locator('button[name="side"]').first()).toBeDisabled()
+
+  // A sport admin for Table Tennis can open their sport, but not another sport's categories.
+  await admin.goto('/c/jsg/admin/staff')
+  await admin.getByLabel('Name', { exact: true }).fill('TT Coordinator')
+  await admin.getByLabel('Sport (sport admins)').selectOption('Table Tennis')
+  await admin.getByRole('button', { name: 'Create login and invite' }).click()
+  await expect(admin.getByText('Copy these now')).toBeVisible()
+  const row = admin.locator('section', { hasText: 'Copy these now' }).locator('tbody tr').first()
+  const user = (await row.locator('td').nth(1).textContent())!.trim()
+  const pass = (await row.locator('td').nth(2).textContent())!.trim()
+  const coord = await (await browser.newContext()).newPage()
+  await coord.goto('/c/jsg/staff/login')
+  await coord.waitForLoadState('networkidle')
+  await coord.getByLabel('Username').fill(user)
+  await coord.getByLabel('Password').fill(pass)
+  await coord.getByRole('button', { name: 'Sign in' }).click()
+  await expect(coord.getByRole('heading', { name: 'Table Tennis' })).toBeVisible()
+  await coord.goto('/c/jsg/staff/sport/Table%20Tennis/categories')
+  await expect(coord.getByRole('link', { name: /Open singles/ })).toBeVisible()
+  await coord.goto('/c/jsg/staff/sport/Chess/categories')
+  await expect(coord).toHaveURL(/staff\/sport\/Table(%20| )Tennis$/)
 })

@@ -66,3 +66,4 @@ header.site a{text-decoration:none;color:inherit}
 .hero + main{padding-top:2rem}
 .tag.on{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
 @media print{header.site,form button,.btn{display:none}}
+.won{font-weight:800}.lost{color:var(--color-text-secondary)}

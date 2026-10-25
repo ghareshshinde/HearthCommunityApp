@@ -89,6 +89,77 @@ create table if not exists staff (
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   unique (community_id, username)
 );
+create table if not exists competition (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  event_id integer not null references event(id),
+  sport text not null,
+  name text not null,
+  format text not null check (format in ('knockout','roundrobin')),
+  entry_type text not null check (entry_type in ('singles','doubles','team')),
+  team_size integer not null default 1,
+  gender text not null default '',          -- '' = any, otherwise 'Male' or 'Female'
+  min_age integer,
+  max_age integer,
+  third_place text not null default 'match' check (third_place in ('match','joint')),
+  drawn integer not null default 0,
+  published_rounds integer not null default 0,
+  locked integer not null default 0,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+create index if not exists competition_event on competition(community_id, event_id, sport);
+create table if not exists entry (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  competition_id integer not null references competition(id),
+  name text not null,
+  seed integer not null default 0,
+  withdrawn integer not null default 0
+);
+create table if not exists entry_member (
+  entry_id integer not null references entry(id),
+  community_id integer not null,
+  competition_id integer not null,
+  participant_id integer not null references participant(id),
+  unique (competition_id, participant_id)
+);
+create table if not exists match (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  competition_id integer not null references competition(id),
+  kind text not null default 'main',        -- main, third, rr
+  round integer not null,
+  slot integer not null,
+  a_entry integer references entry(id),
+  b_entry integer references entry(id),
+  bye integer not null default 0,
+  court text not null default '',
+  scheduled_at text not null default '',
+  status text not null default 'pending',   -- pending (waiting for players), ready, live, done
+  winner integer references entry(id),
+  score text not null default '',
+  outcome text not null default '',         -- played, walkover, retired, bye
+  next_id integer,
+  next_side text,
+  loser_next_id integer,
+  loser_next_side text,
+  version integer not null default 0,
+  updated_by text,
+  updated_at text
+);
+create index if not exists match_comp on match(community_id, competition_id);
+create table if not exists partner_request (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  event_id integer not null,
+  sport text not null,
+  from_pid integer not null,
+  to_pid integer not null,
+  note text not null default '',
+  by text,
+  at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  unique (event_id, sport, from_pid)
+);
 create table if not exists audit_log (
   id integer primary key autoincrement,
   community_id integer references community(id),

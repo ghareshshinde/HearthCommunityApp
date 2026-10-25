@@ -76,6 +76,7 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
           })}
         </div>
 
+        <p><Link href={`/c/${slug}/e/${id}/results`}>Live results and winners</Link></p>
         <p className="muted">Already registered? <Link href={`/c/${slug}/my`}>Find my registration and QR ticket</Link></p>
 
         <h2>Three steps</h2>
