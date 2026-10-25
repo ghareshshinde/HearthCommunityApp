@@ -224,3 +224,14 @@ body:has(.lp){background:var(--color-background)}
 }
 @media (prefers-reduced-motion:reduce){.lp *{transition:none!important}}
 @media (prefers-color-scheme:dark){.lp-link{color:color-mix(in srgb,var(--b,#fdba74) 35%,#fff)}}
+
+/* Section titles sit inside their box, not on its border */
+fieldset.card{padding-top:.75rem}
+fieldset.card>legend{float:left;width:100%;margin:0 0 .75rem;padding:0;font-size:1.15rem;font-weight:700;font-family:var(--font-heading)}
+fieldset.card>legend+*{clear:both}
+/* Sports with a skill level beside each one */
+.sportlines{display:flex;flex-direction:column;gap:.35rem;min-width:15rem}
+.sportline{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(7.5rem,1fr);gap:.4rem;align-items:center}
+.sportline select{padding:.3rem .4rem;font-size:.85rem}
+.sportline select:disabled{opacity:.45}
+.sportline .chip{width:100%}

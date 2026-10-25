@@ -197,8 +197,8 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
         <thead>
           <tr>
             <th>#</th><th>Name</th><th>Age</th><th>Gender</th><th>Mobile</th>
-            {columns.email.show && <th>Email</th>}<th>Sports</th>
-            {columns.skill.show && <th>Skill level</th>}{columns.diet.show && <th>Diet</th>}
+            {columns.email.show && <th>Email</th>}<th>{columns.skill.show ? 'Sports and skill level' : 'Sports'}</th>
+            {columns.diet.show && <th>Diet</th>}
             {columns.tshirt.show && <th>T-shirt</th>}{columns.accessibility.show && <th>Accessibility needs</th>}
             {questions.map((q) => <th key={q.id}>{q.label}{q.required ? ' *' : ''}</th>)}
             <th>Member or Guest</th><th />
@@ -213,22 +213,29 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
               {cell('Gender', i, 'gender', sel(i, 'gender', GENDERS))}
               {cell('Mobile', i, 'mobile', inp(i, 'mobile', { inputMode: 'tel' }))}
               {columns.email.show && cell('Email', i, 'email', inp(i, 'email', { type: 'email' }))}
-              {cell('Sports', i, 'sports',
-                <div className="chips" role="group" aria-label="Sports">
-                  {sports.map((s) => (
-                    <label key={s} className={`chip ${r.sports.includes(s) ? 'on' : ''}`}>
-                      <input type="checkbox" checked={r.sports.includes(s)} onChange={(e) => set(i, 'sports', e.target.checked ? [...r.sports, s] : r.sports.filter((x) => x !== s))} />
-                      <Pic src={sportIcon(s)} size={22} />{s}{seatsLeft[s] === 0 && <em className="wl"> waitlist</em>}
-                    </label>
-                  ))}
-                </div>)}
-              {columns.skill.show && cell('Skill level', i, 'skill', r.sports.length === 0
-                ? <small className="muted">Pick sports first</small>
-                : <div className="skills">{r.sports.map((sp) => (
-                    <label key={sp} className="skillrow"><span>{sp}</span>
-                      <select data-r={i} data-c={`skill-${sp}`} aria-label={`Skill level for ${sp}`} value={r.skills[sp] || r.skill} onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, skills: { ...x.skills, [sp]: e.target.value } } : x)))}>
-                        <option value="">Select</option>{SKILLS.map((o) => <option key={o} value={o}>{o}</option>)}
-                      </select></label>))}</div>)}
+              <td data-label={columns.skill.show ? 'Sports and skill level' : 'Sports'} className={err(i, 'sports') || err(i, 'skill') ? 'bad' : ''}>
+                <div className="sportlines" role="group" aria-label="Sports and skill level">
+                  {sports.map((s) => {
+                    const on = r.sports.includes(s)
+                    return (
+                      <div key={s} className={`sportline ${on ? 'on' : ''}`}>
+                        <label className={`chip ${on ? 'on' : ''}`}>
+                          <input type="checkbox" checked={on} onChange={(e) => set(i, 'sports', e.target.checked ? [...r.sports, s] : r.sports.filter((x) => x !== s))} />
+                          <Pic src={sportIcon(s)} size={22} />{s}{seatsLeft[s] === 0 && <em className="wl"> waitlist</em>}
+                        </label>
+                        {columns.skill.show && (
+                          <select data-r={i} data-c={`skill-${s}`} aria-label={`Skill level for ${s}`} disabled={!on} value={on ? r.skills[s] || r.skill : ''}
+                            onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, skills: { ...x.skills, [s]: e.target.value } } : x)))}>
+                            <option value="">{on ? 'Skill level' : 'Level'}</option>{SKILLS.map((o) => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {err(i, 'sports') && <small role="alert" className="cellerr">{err(i, 'sports')}</small>}
+                {err(i, 'skill') && <small role="alert" className="cellerr">{err(i, 'skill')}</small>}
+              </td>
               {columns.diet.show && cell('Diet', i, 'diet', sel(i, 'diet', diets))}
               {columns.tshirt.show && cell('T-shirt', i, 'tshirt', sel(i, 'tshirt', TSHIRTS))}
               {columns.accessibility.show && cell('Accessibility needs', i, 'accessibility', inp(i, 'accessibility'))}
