@@ -729,3 +729,10 @@ Skill level is asked per chosen sport. Diet options are chosen by the event owne
 
 ### AM12. Live board, feedback and counts (built)
 Live board at `/c/<slug>/e/<id>/board` for a projector: bracket per category (published rounds only, later rounds as waiting boxes), blinking live matches, WON badge on winners, champion banner, on-court and up-next strips, checked-in and matches-done counters, QR to the phone results page, auto-switching category tabs. Feedback: one answer per registration (three star ratings, favourite game, would come again, comments), opens at event start or by admin switch, admin summary, email requests to people who have not answered, Excel export. The registrations Excel now has a Counts sheet (diet, T-shirt, sport, member or guest; registered and arrived) for catering. Also built: volunteer duty roster (admin edits, all staff read) and up to five custom per-person questions set in the event form.
+
+### AM13. Decisions (25 Oct 2026)
+| Decision | Detail |
+| --- | --- |
+| Database | SQLite on one Cloud Run instance, snapshot to a versioned Cloud Storage bucket after every change. Right for one event of about 300 families. Move to managed Postgres (Cloud SQL) only when a second community goes live or more than one instance is needed. Until then no migration work is done. |
+| Phases 3 and 4 | Start only when the owner says so. Nothing in them is built or planned before then. |
+| Proxy risk | Accepted for the first event. Gate volunteers check names and ages on screen. No photo check. |
