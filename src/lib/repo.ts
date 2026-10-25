@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
-import { columnConfig, eventSettings, validateRow, contactSchema, type ParticipantInput } from './registration/rules'
+import { columnConfig, eventSettings, validateRow, contactSchema, submissionShape, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
 
 /** Every query below takes a community id and filters on it. Nothing else touches the tables. */
@@ -94,7 +94,7 @@ export function saveEvent(cid: number, id: number | null, e: EventInput): number
 }
 
 // ---------- registrations ----------
-export type Contact = { website?: string; registrantName: string; registrantMobile: string; registrantEmail: string; emergencyName: string; emergencyMobile: string; waiver: boolean }
+export type Contact = { website?: string; submissionKey?: string; registrantName: string; registrantMobile: string; registrantEmail: string; emergencyName: string; emergencyMobile: string; waiver: boolean }
 export type SubmitResult =
   | { ok: true; token: string; ref: string }
   | { ok: false; error?: string; contactErrors?: Record<string, string>; rowErrors?: Record<number, Record<string, string>> }
@@ -104,7 +104,11 @@ export function isOpen(ev: EventRow, now = new Date()) {
 }
 
 /** Validates everything again on the server (the browser check is a convenience, not a gate). */
-export function validateSubmission(ev: EventRow, contact: Contact, rows: ParticipantInput[]) {
+export function validateSubmission(ev: EventRow, rawContact: unknown, rawRows: unknown) {
+  const shaped = submissionShape.safeParse({ rows: rawRows, contact: rawContact })
+  if (!shaped.success) return { ok: false as const, error: 'The form data was not valid. Please reload the page and try again.' }
+  const contact = shaped.data.contact
+  const rows = shaped.data.rows as ParticipantInput[]
   const cols = columnConfig(ev.config)
   const ages = eventSettings(ev.config).ages
   const sports = JSON.parse(ev.sports) as string[]
@@ -164,7 +168,13 @@ function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnT
 }
 
 export function createRegistration(ev: EventRow, contact: Contact, rows: ParticipantInput[], now = new Date()): SubmitResult {
-  if (contact.website) return { ok: false, error: 'Could not save this registration' } // honeypot field filled in by a bot
+  // A repeat of the same submission (double tap, retry after a dropped connection) returns the registration it already made.
+  const key = typeof contact?.submissionKey === 'string' && contact.submissionKey.length >= 8 ? contact.submissionKey.slice(0, 80) : null
+  if (key) {
+    const prior = one<RegistrationRow>('select * from registration where community_id = ? and event_id = ? and submission_key = ?', ev.community_id, ev.id, key)
+    if (prior) return { ok: true, token: prior.token, ref: prior.ref }
+  }
+  if (contact?.website) return { ok: false, error: 'Could not save this registration' } // honeypot field filled in by a bot
   if (!isOpen(ev, now)) return { ok: false, error: 'Registration is closed for this event' }
   const v = validateSubmission(ev, contact, rows)
   if (!v.ok) return v
@@ -173,16 +183,38 @@ export function createRegistration(ev: EventRow, contact: Contact, rows: Partici
   const d = db()
   d.exec('begin')
   try {
-    const rid = Number(d.prepare('insert into registration (community_id,event_id,ref,token,registrant_name,registrant_mobile,registrant_email,emergency_name,emergency_mobile,waiver_at) values (?,?,?,?,?,?,?,?,?,?)')
-      .run(ev.community_id, ev.id, ref, token, v.contact.registrantName, v.contact.registrantMobile, v.contact.registrantEmail, v.contact.emergencyName, v.contact.emergencyMobile, now.toISOString()).lastInsertRowid)
+    const rid = Number(d.prepare('insert into registration (community_id,event_id,ref,token,registrant_name,registrant_mobile,registrant_email,emergency_name,emergency_mobile,waiver_at,submission_key) values (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(ev.community_id, ev.id, ref, token, v.contact.registrantName, v.contact.registrantMobile, v.contact.registrantEmail, v.contact.emergencyName, v.contact.emergencyMobile, now.toISOString(), key).lastInsertRowid)
     insertParticipants(ev, rid, v.rows)
     audit(ev.community_id, 'public', 'registration.created', ref, { participants: v.rows.length })
-    if (v.contact.registrantEmail) queueEmail(ev.community_id, v.contact.registrantEmail, `Registration received: ${ev.title}`, `Reference ${ref}. Organisers will verify your registration. Edit link: /r/${token}`)
+    queueConfirmation(ev, ref, token, v.contact.registrantEmail, v.contact.registrantName, v.rows.length)
     d.exec('commit')
   } catch (e) { d.exec('rollback'); throw e }
   return { ok: true, token, ref }
 }
 
+/** Public address of this deployment, for links in emails. Set APP_URL (for example https://hearth-xyz.a.run.app). */
+export const publicUrl = (path: string) => `${(process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')}${path}`
+
+function queueConfirmation(ev: EventRow, ref: string, token: string, email: string, name: string, count: number) {
+  const slug = one<{ slug: string }>('select slug from community where id = ?', ev.community_id)!.slug
+  const body = [
+    `Hello ${name},`, '',
+    `Your registration for ${ev.title} is saved (${count} ${count === 1 ? 'person' : 'people'}). Reference: ${ref}`,
+    'The organisers will check your registration and may contact you.', '',
+    `View, edit or cancel until the cut-off: ${publicUrl(`/c/${slug}/r/${token}`)}`,
+    'Keep this email: the link above is the only way to change your registration.',
+  ].join('\n')
+  // One row for the registrant (when they gave an email) and one copy for the community's own address.
+  if (email) queueEmail(ev.community_id, email, `Registration received: ${ev.title} (${ref})`, body)
+  const copy = process.env.NOTIFY_COPY_TO
+  if (copy) for (const to of copy.split(',').map((x) => x.trim()).filter(Boolean)) queueEmail(ev.community_id, to, `[Copy] New registration ${ref}: ${name}, ${count} ${count === 1 ? 'person' : 'people'}`, body)
+}
+
+export function findTokenByRefAndMobile(cid: number, ref: string, mobile: string): string | null {
+  const r = one<{ token: string }>('select token from registration where community_id = ? and ref = ? and registrant_mobile = ?', cid, ref.trim().toUpperCase(), mobile)
+  return r?.token ?? null
+}
 export const getRegistrationByToken = (token: string) => {
   const r = one<RegistrationRow>('select * from registration where token = ?', token)
   return r
@@ -231,6 +263,7 @@ export function ticketStatus(reg: Pick<RegistrationRow, 'status' | 'rejected' | 
   return { valid: true, state, reason: '' }
 }
 
+const slugOf = (cid: number) => one<{ slug: string }>('select slug from community where id = ?', cid)?.slug ?? ''
 function queueDecisionEmail(reg: RegistrationRow, subject: string, body: string) {
   if (reg.registrant_email) queueEmail(reg.community_id, reg.registrant_email, subject, body)
 }
@@ -242,7 +275,7 @@ export function approveRegistration(cid: number, id: number, by: string, note = 
   const was = regState(reg)
   db().prepare("update registration set status='confirmed', rejected=0, decision_note=?, decided_by=?, decided_at=?, updated_at=? where community_id=? and id=?").run(note, by, now.toISOString(), now.toISOString(), cid, id)
   audit(cid, by, was === 'rejected' || was === 'cancelled' ? 'registration.reinstated' : 'registration.approved', reg.ref, { note })
-  queueDecisionEmail(reg, 'Your registration is approved', `Reference ${reg.ref} is approved. Your QR ticket is ready on your registration page.`)
+  queueDecisionEmail(reg, 'Your registration is approved', `Reference ${reg.ref} is approved. Your QR ticket is ready on your registration page: ${publicUrl(`/c/${slugOf(reg.community_id)}/r/${reg.token}`)}`)
   return true
 }
 
@@ -479,4 +512,4 @@ export const listAudit = (cid: number, limit = 100) =>
 export function queueEmail(cid: number, to: string, subject: string, body: string) {
   db().prepare('insert into outbox (community_id,to_email,subject,body) values (?,?,?,?)').run(cid, to, subject, body)
 }
-export const listOutbox = (cid: number) => all<{ id: number; to_email: string; subject: string; body: string; at: string }>('select * from outbox where community_id = ? order by id desc limit 100', cid)
+export const listOutbox = (cid: number) => all<{ id: number; to_email: string; subject: string; body: string; at: string; sent: number; attempts: number; error: string | null }>('select * from outbox where community_id = ? order by id desc limit 100', cid)

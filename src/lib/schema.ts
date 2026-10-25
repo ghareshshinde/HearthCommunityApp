@@ -43,6 +43,7 @@ create table if not exists registration (
   decision_note text not null default '',
   decided_by text,
   decided_at text,
+  submission_key text,
   status text not null default 'pending' check (status in ('pending','confirmed','cancelled')),
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
@@ -106,6 +107,8 @@ create table if not exists outbox (
   subject text not null,
   body text not null,
   sent integer not null default 0,
+  attempts integer not null default 0,
+  error text,
   at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 `

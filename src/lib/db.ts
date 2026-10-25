@@ -23,6 +23,10 @@ export function getDb(): DatabaseSync {
   addColumn(db, 'registration', 'decision_note', "text not null default ''")
   addColumn(db, 'registration', 'decided_by', 'text')
   addColumn(db, 'registration', 'decided_at', 'text')
+  addColumn(db, 'registration', 'submission_key', 'text')
+  addColumn(db, 'outbox', 'attempts', 'integer not null default 0')
+  addColumn(db, 'outbox', 'error', 'text')
+  db.exec('create unique index if not exists registration_submission on registration(community_id, event_id, submission_key) where submission_key is not null')
   return db
 }
 

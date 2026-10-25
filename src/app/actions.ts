@@ -7,6 +7,9 @@ import { checkSession, makeSession, verifyPassword } from '@/lib/auth'
 import { cookieName } from '@/lib/session'
 import * as repo from '@/lib/repo'
 import { persist } from '@/lib/persist'
+import { allow } from '@/lib/ratelimit'
+import { deliverEmails } from '@/lib/mail'
+import { normalizeMobile } from '@/lib/registration/rules'
 import { hashPassword } from '@/lib/auth'
 import type { Contact, SubmitResult } from '@/lib/repo'
 import type { ParticipantInput } from '@/lib/registration/rules'
@@ -26,8 +29,25 @@ export async function submitRegistration(slug: string, eventId: number, contact:
   const c = repo.getCommunityBySlug(slug)
   const ev = c && repo.getEvent(c.id, eventId)
   if (!c || !ev) return { ok: false, error: 'Event not found' }
+  const ip = ((await headers()).get('x-forwarded-for') ?? 'local').split(',')[0].trim()
+  if (!allow(`reg:${ip}`, 20, 10 * 60_000)) return { ok: false, error: 'Too many registrations from this connection. Please wait a few minutes and try again.' }
   const r = repo.createRegistration(ev, contact, rows)
-  return r.ok ? savedOrError(r) : r
+  if (!r.ok) return r
+  const saved = await savedOrError(r)
+  if (saved.ok) await deliverEmails()
+  return saved
+}
+
+export type FindState = { error?: string; values?: { ref: string; mobile: string } }
+/** Lost-link recovery: the reference plus the registrant's mobile number leads back to the edit page. */
+export async function findMyRegistration(slug: string, _prev: FindState | undefined, form: FormData): Promise<FindState> {
+  const c = repo.getCommunityBySlug(slug)
+  const ip = ((await headers()).get('x-forwarded-for') ?? 'local').split(',')[0].trim()
+  const values = { ref: String(form.get('ref') ?? ''), mobile: String(form.get('mobile') ?? '') }
+  if (!c || !allow(`find:${ip}`, 10, 10 * 60_000)) return { error: 'Too many attempts. Please wait a few minutes.', values }
+  const token = repo.findTokenByRefAndMobile(c.id, values.ref, normalizeMobile(values.mobile))
+  if (!token) return { error: 'We could not find a registration with that reference and mobile number.', values }
+  redirect(`/c/${slug}/r/${token}`)
 }
 
 /** Make the write durable before telling the person it worked (a no-op when no bucket is configured). */
@@ -173,4 +193,13 @@ export async function decideRegistrationAction(slug: string, eventId: number, re
   await persist()
   revalidatePath(`/c/${slug}/admin`)
   redirect(`/c/${slug}/admin/events/${eventId}/review`)
+}
+
+export async function retryEmailsAction(slug: string) {
+  const c = await adminCtx(slug)
+  const { sendQueued } = await import('@/lib/mail')
+  const r = await sendQueued(50)
+  repo.audit(c.id, 'admin', 'email.retry', null, r)
+  await persist()
+  revalidatePath(`/c/${slug}/admin/audit`)
 }

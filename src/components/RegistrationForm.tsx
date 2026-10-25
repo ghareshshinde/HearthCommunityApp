@@ -38,6 +38,8 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
   const [draftNote, setDraftNote] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const tableRef = useRef<HTMLTableElement>(null)
+  // One key per form visit: a repeated submit (double tap, retry) returns the first registration instead of making another.
+  const [submissionKey] = useState(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `k${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`))
   const key = draftKey ?? `hearth-draft-${eventId}`
 
   // TR9: draft kept 7 days in this browser.
@@ -114,7 +116,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
     }
     if (!contact.waiver) { setContactErrors({ waiver: 'You must accept the waiver' }); return }
     setBusy(true)
-    const res = await submit(contact, rows)
+    const res = await submit({ ...contact, submissionKey }, rows)
     setBusy(false)
     if (res.ok) {
       try { localStorage.removeItem(key) } catch { /* ignore */ }

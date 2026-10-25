@@ -16,6 +16,11 @@ ever saves newer data, the app refuses to overwrite it and shows "We could not s
 | `GCS_OBJECT` | optional, default `hearth/hearth.db` | |
 | `SEED_DEMO_EVENT` | `true` for a demo event on first run | Optional. |
 | `RESET_ADMIN_PASSWORD` | `true` once, with `ADMIN_PASSWORD` set | Recovery if the password is lost. Remove it afterwards. |
+| `APP_URL` | the public address, e.g. `https://hearth-xxxx.a.run.app` | Used for the links in emails and for sharing previews. |
+| `SMTP_URL` | e.g. `smtps://user:app-password@smtp.gmail.com:465` | Turns email sending on. Without it, emails are only recorded in Admin > Audit log and emails. |
+| `EMAIL_FROM` | e.g. `JSG Hyderabad <jsghyd@gmail.com>` | Sender name and address. |
+| `EMAIL_REPLY_TO` | the community's address | Replies go here. |
+| `NOTIFY_COPY_TO` | `jsghyd@gmail.com` (comma-separate for more) | A copy of every new registration goes to this address. |
 | max instances | 1 | Required. |
 
 ## Steps (Cloud Shell, once)

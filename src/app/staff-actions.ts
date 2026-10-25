@@ -68,11 +68,14 @@ export async function undoCheckInAction(slug: string, ticket: string, participan
   redirect(`/c/${slug}/staff/gate?t=${encodeURIComponent(ticket)}`)
 }
 
-export type WalkInState = { error?: string; ok?: string; rowErrors?: Record<string, string>; contactErrors?: Record<string, string> }
+export type WalkInState = { error?: string; ok?: string; rowErrors?: Record<string, string>; contactErrors?: Record<string, string>; values?: Record<string, string | string[]> }
 export async function walkInAction(slug: string, eventId: number, registrationId: number | null, ticket: string, _prev: WalkInState | undefined, form: FormData): Promise<WalkInState> {
   const { c, a } = await gateActor(slug)
+  // Handed back on any error so the desk volunteer never has to retype what they entered.
+  const values: Record<string, string | string[]> = {}
+  for (const k of new Set(form.keys())) values[k] = k === 'sports' ? form.getAll(k).map(String) : String(form.get(k) ?? '')
   const ev = repo.getEvent(c.id, eventId)
-  if (!ev) return { error: 'Event not found' }
+  if (!ev) return { error: 'Event not found', values }
   const person: ParticipantInput = {
     name: String(form.get('name') ?? ''), age: String(form.get('age') ?? ''), gender: String(form.get('gender') ?? ''), mobile: String(form.get('mobile') ?? ''),
     email: '', sports: form.getAll('sports').map(String), skill: String(form.get('skill') ?? ''), diet: String(form.get('diet') ?? 'Vegetarian'),
@@ -86,8 +89,8 @@ export async function walkInAction(slug: string, eventId: number, registrationId
       emergencyName: String(form.get('emergencyName') ?? ''), emergencyMobile: String(form.get('emergencyMobile') ?? ''),
     },
   })
-  if (!r.ok) return { error: r.error, rowErrors: r.rowErrors, contactErrors: r.contactErrors }
-  try { await persist() } catch (e) { console.error(e); return { error: 'Saved here but not yet backed up. Check the connection and press the button again to retry.' } }
+  if (!r.ok) return { error: r.error, rowErrors: r.rowErrors, contactErrors: r.contactErrors, values }
+  try { await persist() } catch (e) { console.error(e); return { error: 'Saved here but not yet backed up. Check the connection and press the button again to retry.', values } }
   revalidatePath(`/c/${slug}/staff/gate`)
   if (registrationId) redirect(`/c/${slug}/staff/gate?t=${encodeURIComponent(ticket)}&done=1`)
   const reg = repo.getRegistrationById(c.id, r.registrationId)!

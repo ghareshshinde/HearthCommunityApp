@@ -1,13 +1,27 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
-import { getEvent, isOpen, seatsLeft } from '@/lib/repo'
+import { getCommunityBySlug, getEvent, isOpen, seatsLeft } from '@/lib/repo'
 import { formatIst } from '@/lib/time'
 import { googleCalendarUrl } from '@/lib/calendar'
 import { sportIcon } from '@/lib/sports'
 import { eventSettings } from '@/lib/registration/rules'
 import ShareButton from '@/components/ShareButton'
 import Pic from '@/components/Pic'
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string; id: string }> }) {
+  const { slug, id } = await params
+  const c = getCommunityBySlug(slug)
+  const ev = c && getEvent(c.id, Number(id))
+  if (!c || !ev || ev.status === 'draft') return {}
+  const base = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  return {
+    metadataBase: new URL(base),
+    title: ev.title,
+    description: `${ev.venue ? `${ev.venue}. ` : ''}Register your family for ${ev.title}.`,
+    openGraph: { title: ev.title, description: `Register your family for ${ev.title}.`, images: c.brand.logo ? [c.brand.logo] : [] },
+  }
+}
 
 export default async function EventPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params
@@ -61,6 +75,8 @@ export default async function EventPage({ params }: { params: Promise<{ slug: st
             )
           })}
         </div>
+
+        <p className="muted">Already registered? <Link href={`/c/${slug}/my`}>Find my registration and QR ticket</Link></p>
 
         <h2>Three steps</h2>
         <div className="steps">

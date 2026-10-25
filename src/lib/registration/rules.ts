@@ -112,12 +112,26 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
     ok,
     errors,
     value: ok
-      ? { name, age, gender: row.gender as 'Male' | 'Female', mobile: phone, email, sports: row.sports,
+      ? { name, age, gender: row.gender as 'Male' | 'Female', mobile: phone, email, sports: [...new Set(row.sports)],
           skill: row.skill, diet: row.diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
           kind: row.kind as 'member' | 'guest' }
       : null,
   }
 }
+
+const text = (max: number) => z.string().max(max).default('')
+/** Shape guard for anything arriving from a browser: wrong types or oversized values are rejected before any rule runs. */
+export const rowShape = z.object({
+  name: text(200), age: z.union([z.string().max(10), z.number()]).transform((v) => String(v)).default(''), gender: text(20), mobile: text(30), email: text(200),
+  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
+})
+export const submissionShape = z.object({
+  rows: z.array(rowShape).max(200),
+  contact: z.object({
+    website: z.string().max(200).optional(), submissionKey: z.string().max(80).optional(),
+    registrantName: text(200), registrantMobile: text(30), registrantEmail: text(200), emergencyName: text(200), emergencyMobile: text(30), waiver: z.boolean().default(false),
+  }),
+})
 
 export const contactSchema = z.object({
   registrantName: englishName(80),
