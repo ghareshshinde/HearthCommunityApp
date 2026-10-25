@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, normalizeMobile, parsePaste, validateRow } from './rules'
+
+const row = (o = {}) => ({ ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '98765 43210', sports: ['Chess'], skill: 'casual', ...o })
+
+describe('validateRow', () => {
+  it('accepts a valid adult and normalises the mobile', () => {
+    const r = validateRow(row(), DEFAULT_SPORTS, DEFAULT_COLUMNS)
+    expect(r.ok).toBe(true)
+    expect(r.value?.mobile).toBe('9876543210')
+  })
+  it('strips +91 and leading zero', () => {
+    expect(normalizeMobile('+91 98765 43210')).toBe('9876543210')
+    expect(normalizeMobile('09876543210')).toBe('9876543210')
+  })
+  it('requires a mobile for adults but not for children', () => {
+    expect(validateRow(row({ mobile: '' }), DEFAULT_SPORTS, DEFAULT_COLUMNS).errors.mobile).toBeTruthy()
+    expect(validateRow(row({ mobile: '', age: '9' }), DEFAULT_SPORTS, DEFAULT_COLUMNS).ok).toBe(true)
+  })
+  it('reports per-cell errors', () => {
+    const r = validateRow(row({ name: '', age: '150', gender: '', sports: [], email: 'x' }), DEFAULT_SPORTS, DEFAULT_COLUMNS)
+    expect(Object.keys(r.errors).sort()).toEqual(['age', 'email', 'gender', 'name', 'sports'])
+  })
+  it('rejects sports the event does not offer', () => {
+    expect(validateRow(row({ sports: ['Golf'] }), DEFAULT_SPORTS, DEFAULT_COLUMNS).errors.sports).toBe('Unknown sport')
+  })
+  it('honours per-event required columns', () => {
+    const cols = { ...DEFAULT_COLUMNS, tshirt: { show: true, required: true } }
+    expect(validateRow(row(), DEFAULT_SPORTS, cols).errors.tshirt).toBe('Required')
+  })
+})
+
+describe('parsePaste', () => {
+  it('turns tab-separated Excel rows into participant rows, keeping Gujarati names', () => {
+    const rows = parsePaste('આશા શાહ\t34\tfemale\t9876543210\t\tChess, carrom\tcasual\tJain\tM\t\tguest\nRaj\t9\tMale', DEFAULT_SPORTS)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ name: 'આશા શાહ', gender: 'Female', sports: ['Chess', 'Carrom'], diet: 'Jain', kind: 'guest' })
+    expect(rows[1]).toMatchObject({ name: 'Raj', age: '9', kind: 'member', diet: 'Vegetarian' })
+  })
+})

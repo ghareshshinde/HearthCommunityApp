@@ -1,6 +1,0 @@
--- Fake data only. Two communities (JSG and a dummy kitty party group). Users must exist in auth.users first;
--- sign in once with two Google accounts, then replace the UUIDs below with those users' ids.
--- insert into community (slug, name, type, city, about, owner_id) values
---   ('jsg', 'JSG Hyderabad (demo)', 'trust', 'Hyderabad', 'Demo tenant for the Sports Fiesta.', '<owner-uuid>'),
---   ('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', '<owner-uuid-2>');
--- update community set status = 'live';  -- as platform admin

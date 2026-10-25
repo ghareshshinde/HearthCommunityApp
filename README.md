@@ -1,18 +1,25 @@
 # Hearth
 
-Multi-tenant community platform. Source of truth: `PRD.md` (drop the Markdown export in the repo root; not yet committed).
+Multi-tenant community platform. Source of truth: `PRD.md`, including its **Alternative MVP track** (no Google sign-in, no payments, no Supabase).
 
-## Setup
-1. `cp .env.example .env.local` and fill in Supabase, Resend and secrets.
-2. Apply `supabase/migrations/*.sql` (Supabase CLI `supabase db push`, or paste into the SQL editor).
-3. Supabase Auth: enable Google provider and TOTP MFA.
-4. `npm run dev`, open `/c/<slug>`.
+## Run
+```
+npm install
+npm run dev          # http://localhost:3000, demo data and admin password "change-me" in dev
+```
+Production: set `ADMIN_PASSWORD` and `SESSION_SECRET` (see `.env.example`), mount a volume for the SQLite file (`DATABASE_PATH`), or use the Dockerfile:
+`docker build -t hearth . && docker run -p 3000:3000 -v hearth-data:/data -e ADMIN_PASSWORD=... -e SESSION_SECRET=... hearth`
+SQLite means a single instance with a persistent disk (Fly volume, Railway volume, a VPS). It will not work on Vercel's ephemeral filesystem.
 
 ## Checks
-`npm run typecheck && npm run lint && npm test` (DB policy tests run in-process on PGlite), `npm run e2e` (set `PW_CHROMIUM` if the bundled browser is missing).
+`npm run typecheck && npm run lint && npm test` then `npm run e2e` (set `PW_CHROMIUM=/path/to/chromium` if the bundled browser is missing).
 
-## Slice 1 demo
-1. Sign in with Google at `/login`.
-2. Insert a community (see `supabase/seed.sql`), approve it as platform admin (`status='live'`).
-3. Open `/c/jsg`: change `community.branding` to `{"colors":{"primary":"#0b3d91"}}`; reload, no deploy needed.
-4. Open `/c/jsg/admin` as owner: redirected to `/mfa` until TOTP is verified.
+## Demo script
+1. `/c/jsg` > Sports Fiesta (demo) > Register. Fill your details, paste or type six rows, mark two as Guest, accept the waiver, submit. Keep the reference link.
+2. `/c/jsg/admin` (password above). Dashboard shows counts. Registrations: search, filter, click a cell to edit, tick rows and apply Verify or Confirm, then Download Excel (one tab per sport).
+3. Admin > Branding: change primary colour; public pages update immediately. Low-contrast choices are refused.
+4. Admin > Audit log shows registrations, edits, exports and sign-ins. Emails go to the outbox until SMTP is added.
+
+## What is built
+Tenancy by `/c/slug` (and `slug.ROOT_DOMAIN`), branding tokens, English/Hindi/Gujarati scaffold, event admin, tabular registration grid, edit/cancel by secret link, registrations workspace with inline edit, bulk actions, Excel export, dashboard, audit log.
+Not yet built: photo-verified check-in and spot desk, sports operations and podium, live board, feedback, catering and volunteer screens, roster import, full Hindi and Gujarati translations, offline PWA, real email sending.

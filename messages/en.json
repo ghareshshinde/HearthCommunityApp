@@ -1,6 +1,30 @@
 {
-  "common": { "signIn": "Sign in with Google", "signOut": "Sign out", "directory": "Communities", "apply": "Apply to join", "search": "Search by name or city" },
-  "roles": { "owner": "Owner", "committee": "Committee", "treasurer": "Treasurer", "volunteer": "Volunteer", "member": "Member", "guest": "Guest" },
-  "admin": { "title": "Admin console", "mfaRequired": "Set up two-step verification to use admin tools.", "mfaSetup": "Set up two-step verification" },
-  "community": { "notFound": "Community not found", "pending": "This community is awaiting approval." }
+  "common": {
+    "signIn": "Sign in with Google",
+    "signOut": "Sign out",
+    "directory": "Communities",
+    "apply": "Apply to join",
+    "search": "Search by name or city"
+  },
+  "roles": {
+    "owner": "Owner",
+    "committee": "Committee",
+    "treasurer": "Treasurer",
+    "volunteer": "Volunteer",
+    "member": "Member",
+    "guest": "Guest"
+  },
+  "admin": {
+    "title": "Admin console",
+    "mfaRequired": "Set up two-step verification to use admin tools.",
+    "mfaSetup": "Set up two-step verification"
+  },
+  "community": {
+    "notFound": "Community not found",
+    "pending": "This community is awaiting approval.",
+    "events": "Events",
+    "noEvents": "No events are open yet.",
+    "register": "Register",
+    "closed": "Registration closed"
+  }
 }
