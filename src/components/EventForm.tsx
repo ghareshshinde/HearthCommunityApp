@@ -53,6 +53,16 @@ export default function EventForm({ slug, ev }: { slug: string; ev?: EventRow })
         ))}
         <label>Other options (comma separated)<input name="diet_custom" defaultValue={settings.diets.filter((d) => !(DIETS as readonly string[]).includes(d)).join(', ')} placeholder="e.g. Eggetarian" /></label>
       </fieldset>
+      <fieldset><legend>Extra questions (asked for each person)</legend>
+        <p className="muted" style={{ margin: '0 0 .5rem' }}>Up to five, for example blood group or school. For a pick list, type the choices separated by commas; leave it empty for a free-text answer.</p>
+        {Array.from({ length: 5 }, (_, i) => settings.questions[i]).map((q, i) => (
+          <div key={i} className="fields" style={{ alignItems: 'end' }}>
+            <label>Question {i + 1}<input name={`q_label_${i}`} defaultValue={q?.label ?? ''} maxLength={80} /></label>
+            <label>Choices (optional)<input name={`q_options_${i}`} defaultValue={q?.options.join(', ') ?? ''} /></label>
+            <label style={{ flexDirection: 'row', gap: '.5rem' }}><input type="checkbox" name={`q_required_${i}`} defaultChecked={q?.required} />Required</label>
+          </div>
+        ))}
+      </fieldset>
       <fieldset><legend>Form columns</legend>
         {(Object.keys(DEFAULT_COLUMNS) as OptionalColumn[]).map((k) => (
           <p key={k}>

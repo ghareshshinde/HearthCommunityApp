@@ -63,6 +63,7 @@ create table if not exists participant (
   waitlist text not null default '[]',   -- sports this person is waitlisted for (capacity reached)
   skill text not null default '',
   skills text not null default '',
+  extra text not null default '{}',
   diet text not null default 'Vegetarian',
   tshirt text not null default '',
   accessibility text not null default '',
@@ -188,6 +189,18 @@ create table if not exists feedback (
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   unique (event_id, registration_id)
+);
+create table if not exists duty (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  event_id integer not null,
+  volunteer text not null,
+  mobile text not null default '',
+  area text not null,
+  starts text not null default '',
+  ends text not null default '',
+  notes text not null default '',
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 create table if not exists audit_log (
   id integer primary key autoincrement,

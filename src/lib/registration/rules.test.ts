@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, columnConfig, normalizeMobile, parsePaste, validateRow } from './rules'
+import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, parseQuestions, columnConfig, normalizeMobile, parsePaste, validateRow } from './rules'
 
 const row = (o = {}) => ({ ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '98765 43210', sports: ['Chess'], skill: 'casual', ...o })
 
@@ -64,5 +64,19 @@ describe('skill per sport and event diets', () => {
     expect(validateRow(row({ diet: 'Jain' }), sports, cols, {}, ['Jain', 'Vegan']).ok).toBe(true)
     expect(validateRow(row({ diet: 'Other' }), sports, cols, {}, ['Jain', 'Vegan']).errors.diet).toBeTruthy()
     expect(columnConfig('{}').diet.show).toBe(false)
+  })
+})
+
+describe('extra questions', () => {
+  const qs = parseQuestions([{ label: 'Blood group', kind: 'choice', options: ['A+', 'B+', ' '], required: true }, { label: '', kind: 'text' }, { label: 'School', kind: 'text', required: false }])
+  it('keeps only filled questions and turns an empty choice list into free text', () => {
+    expect(qs.map((q) => [q.id, q.label, q.kind])).toEqual([['q1', 'Blood group', 'choice'], ['q3', 'School', 'text']])
+    expect(qs[0].options).toEqual(['A+', 'B+'])
+  })
+  it('enforces required and choice answers and returns the cleaned answers', () => {
+    expect(validateRow(row(), ['Chess'], DEFAULT_COLUMNS, {}, [], qs).errors.extra).toMatch(/Blood group is required/)
+    expect(validateRow(row({ extra: { q1: 'Z+' } }), ['Chess'], DEFAULT_COLUMNS, {}, [], qs).errors.extra).toMatch(/choose one/)
+    const ok = validateRow(row({ extra: { q1: 'A+', q3: ' Sunrise High ', q9: 'ignored' } }), ['Chess'], DEFAULT_COLUMNS, {}, [], qs)
+    expect(ok.value!.extra).toEqual({ q1: 'A+', q3: 'Sunrise High' })
   })
 })

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   GENDERS, SKILLS, SOFT_LIMIT, TSHIRTS, blankRow, parsePaste, validateRow,
-  type ColumnConfig, type ParticipantInput, type RowErrors,
+  type ColumnConfig, type ParticipantInput, type Question, type RowErrors,
 } from '@/lib/registration/rules'
 import type { Contact, SubmitResult } from '@/lib/repo'
 import Pic from '@/components/Pic'
@@ -17,6 +17,7 @@ type Props = {
   columns: ColumnConfig
   ages?: Record<string, { min?: number; max?: number }>
   diets?: string[]
+  questions?: Question[]
   waiver: string
   emailRequired?: boolean
   seatsLeft: Record<string, number | null>
@@ -30,8 +31,9 @@ type Props = {
 const DRAFT_DAYS = 7
 const NO_AGES = {}
 const NO_DIETS: string[] = []
+const NO_QUESTIONS: Question[] = []
 
-export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, diets = NO_DIETS, waiver, emailRequired = true, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
+export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, diets = NO_DIETS, questions = NO_QUESTIONS, waiver, emailRequired = true, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
   const router = useRouter()
   const [rows, setRows] = useState<ParticipantInput[]>(initialRows?.length ? initialRows : [blankRow()])
   const [contact, setContact] = useState<Contact>({ registrantName: '', registrantMobile: '', registrantEmail: '', emergencyName: '', emergencyMobile: '', waiver: false, ...initialContact })
@@ -71,7 +73,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
     return () => clearTimeout(t)
   }, [rows, contact, key, initialRows])
 
-  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns, ages, diets)), [rows, sports, columns, ages, diets])
+  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns, ages, diets, questions)), [rows, sports, columns, ages, diets, questions])
   const summary = {
     participants: rows.length,
     members: rows.filter((r) => r.kind === 'member').length,
@@ -93,7 +95,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
   }
   const addRow = () => { setRows((rs) => [...rs, blankRow()]); show(rows.length); setNote(`Person ${rows.length + 1} added`) }
   const dup = (i: number) => {
-    setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i], sports: [...rs[i].sports], skills: { ...rs[i].skills }, name: '', mobile: '', email: '' }, ...rs.slice(i + 1)])
+    setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i], sports: [...rs[i].sports], skills: { ...rs[i].skills }, extra: { ...rs[i].extra }, name: '', mobile: '', email: '' }, ...rs.slice(i + 1)])
     show(i + 1); setNote(`Person ${i + 1} duplicated: enter the new name`)
   }
   const del = (i: number) => {
@@ -198,6 +200,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
             {columns.email.show && <th>Email</th>}<th>Sports</th>
             {columns.skill.show && <th>Skill level</th>}{columns.diet.show && <th>Diet</th>}
             {columns.tshirt.show && <th>T-shirt</th>}{columns.accessibility.show && <th>Accessibility needs</th>}
+            {questions.map((q) => <th key={q.id}>{q.label}{q.required ? ' *' : ''}</th>)}
             <th>Member or Guest</th><th />
           </tr>
         </thead>
@@ -229,6 +232,14 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
               {columns.diet.show && cell('Diet', i, 'diet', sel(i, 'diet', diets))}
               {columns.tshirt.show && cell('T-shirt', i, 'tshirt', sel(i, 'tshirt', TSHIRTS))}
               {columns.accessibility.show && cell('Accessibility needs', i, 'accessibility', inp(i, 'accessibility'))}
+              {questions.map((q, qi) => (
+                <td key={q.id} data-label={q.label} className={qi === questions.length - 1 && err(i, 'extra') ? 'bad' : ''}>
+                  {q.kind === 'choice'
+                    ? <select data-r={i} data-c={`extra-${q.id}`} aria-label={q.label} value={r.extra[q.id] ?? ''} onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, extra: { ...x.extra, [q.id]: e.target.value } } : x)))}><option value="">Select</option>{q.options.map((o) => <option key={o}>{o}</option>)}</select>
+                    : <input data-r={i} data-c={`extra-${q.id}`} aria-label={q.label} value={r.extra[q.id] ?? ''} maxLength={200} onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, extra: { ...x.extra, [q.id]: e.target.value } } : x)))} />}
+                  {qi === questions.length - 1 && err(i, 'extra') && <small role="alert" className="cellerr">{err(i, 'extra')}</small>}
+                </td>
+              ))}
               {cell('Member or Guest', i, 'kind', sel(i, 'kind', ['member', 'guest'], false))}
               <td className="actions">
                 <button type="button" disabled={!ready} onClick={() => dup(i)} title="Duplicate this person" aria-label={`Duplicate person ${i + 1}`}>Duplicate</button>

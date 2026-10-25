@@ -26,7 +26,7 @@ export default async function Register({ params }: { params: Promise<{ slug: str
       </section>
       <main className="wide">
         <RegistrationForm
-          slug={slug} eventId={ev.id} sports={sports} columns={columnConfig(ev.config)} ages={settings.ages} diets={settings.diets} waiver={settings.waiver} emailRequired={settings.contactEmailRequired} seatsLeft={seatsLeft(ev)}
+          slug={slug} eventId={ev.id} sports={sports} columns={columnConfig(ev.config)} ages={settings.ages} diets={settings.diets} questions={settings.questions} waiver={settings.waiver} emailRequired={settings.contactEmailRequired} seatsLeft={seatsLeft(ev)}
           submit={submitRegistration.bind(null, slug, ev.id)} submitLabel="Submit registration"
         />
       </main>

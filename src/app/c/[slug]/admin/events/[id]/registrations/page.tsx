@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
 import { filterRows, getEvent, listRows, stats, type Filters } from '@/lib/repo'
 import { bulkActionForm } from '@/app/actions'
-import { GENDERS, TSHIRTS, eventSettings, skillsOf } from '@/lib/registration/rules'
+import { GENDERS, TSHIRTS, eventSettings, extraOf, skillsOf } from '@/lib/registration/rules'
 import { formatIst } from '@/lib/time'
 import EditableCell from '@/components/EditableCell'
 import ConfirmButton from '@/components/ConfirmButton'
@@ -14,6 +14,7 @@ export default async function Registrations({ params, searchParams }: { params: 
   const c = await requireCommunity(slug, true)
   const ev = getEvent(c.id, Number(id))
   const diets = ev ? eventSettings(ev.config).diets : []
+  const questions = ev ? eventSettings(ev.config).questions : []
   if (!ev) notFound()
   const sports = JSON.parse(ev.sports) as string[]
   const all = listRows(c.id, ev.id)
@@ -55,7 +56,7 @@ export default async function Registrations({ params, searchParams }: { params: 
         </p>
         <div style={{ overflowX: 'auto' }}>
           <table className="data">
-            <thead><tr><th /><th>Ref</th><th>Registered (IST)</th><th>Name</th><th>Age</th><th>Gender</th><th>Mobile</th><th>Sports</th><th>Skill</th><th>Diet</th><th>T-shirt</th><th>Access.</th><th>Type</th><th>Verified</th><th>Arrived</th><th>Status</th><th>Registrant</th></tr></thead>
+            <thead><tr><th /><th>Ref</th><th>Registered (IST)</th><th>Name</th><th>Age</th><th>Gender</th><th>Mobile</th><th>Sports</th><th>Skill</th><th>Diet</th><th>T-shirt</th><th>Access.</th>{questions.map((q) => <th key={q.id}>{q.label}</th>)}<th>Type</th><th>Verified</th><th>Arrived</th><th>Status</th><th>Registrant</th></tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} style={r.reg_status === 'cancelled' ? { opacity: 0.5 } : undefined}>
@@ -70,6 +71,7 @@ export default async function Registrations({ params, searchParams }: { params: 
                   <td><EditableCell slug={slug} id={r.id} field="diet" value={r.diet} options={["", ...diets]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="tshirt" value={r.tshirt} options={['', ...TSHIRTS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="accessibility" value={r.accessibility} /></td>
+                  {questions.map((q) => <td key={q.id}>{extraOf(r)[q.id] ?? ''}</td>)}
                   <td><EditableCell slug={slug} id={r.id} field="kind" value={r.kind} options={['member', 'guest']} /></td>
                   <td>{r.verified ? 'Yes' : 'No'}</td><td>{r.checked_in_at ? formatIst(r.checked_in_at, { timeStyle: 'short' }) : ''}{r.source === 'spot' ? ' (walk-in)' : ''}</td><td><span className="tag">{r.reg_state}</span>{r.reg_note && <small className="muted" style={{ display: 'block' }}>{r.reg_note}</small>}</td>
                   <td>{r.registrant_name}<br />{r.registrant_mobile}</td>

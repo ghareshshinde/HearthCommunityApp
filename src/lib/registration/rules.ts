@@ -18,6 +18,16 @@ export const DEFAULT_COLUMNS: ColumnConfig = {
   tshirt: { show: true, required: false },
   accessibility: { show: true, required: false },
 }
+/** Up to five extra questions the event owner adds, asked once per person. */
+export function parseQuestions(v: unknown): Question[] {
+  if (!Array.isArray(v)) return []
+  return v.slice(0, 5).map((q, i) => {
+    const o = (q ?? {}) as Record<string, unknown>
+    const kind: Question['kind'] = o.kind === 'choice' ? 'choice' : 'text'
+    const options = kind === 'choice' && Array.isArray(o.options) ? [...new Set((o.options as unknown[]).map((x) => String(x).trim().slice(0, 40)).filter(Boolean))].slice(0, 12) : []
+    return { id: `q${i + 1}`, label: String(o.label ?? '').trim().slice(0, 80), kind: kind === 'choice' && !options.length ? 'text' as const : kind, options, required: o.required === true }
+  }).filter((q) => q.label)
+}
 function parseDiets(v: unknown): string[] {
   return Array.isArray(v) ? [...new Set(v.map((d) => String(d).trim().slice(0, 30)).filter(Boolean))].slice(0, 12) : []
 }
@@ -40,8 +50,9 @@ export const ENGLISH_NAME = /^[A-Za-z][A-Za-z .'’-]*$/
 const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
+export type Question = { id: string; label: string; kind: 'text' | 'choice'; options: string[]; required: boolean }
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[] }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[]; questions: Question[] }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -59,7 +70,7 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
   const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
   const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
   // Required unless an admin switches it off: the emailed link is how a family gets back to its registration.
-  return { diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  return { questions: parseQuestions(c.questions), diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
@@ -67,17 +78,17 @@ const mobile = z.string().transform(normalizeMobile).refine((v) => /^\d{10}$/.te
 
 export type ParticipantInput = {
   name: string; age: string | number; gender: string; mobile: string; email: string; sports: string[]
-  skill: string; skills: Record<string, string>; diet: string; tshirt: string; accessibility: string; kind: string
+  skill: string; skills: Record<string, string>; extra: Record<string, string>; diet: string; tshirt: string; accessibility: string; kind: string
 }
 export const blankRow = (): ParticipantInput => ({
-  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', skills: {}, diet: '',
+  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', skills: {}, extra: {}, diet: '',
   tshirt: '', accessibility: '', kind: 'member',
 })
 
 export type RowErrors = Partial<Record<keyof ParticipantInput, string>>
 
 /** Validates one row against the event. Returns cleaned values or per-cell errors. Shared by browser and server. */
-export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig, ages: Record<string, AgeLimit> = {}, diets: string[] = []) {
+export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig, ages: Record<string, AgeLimit> = {}, diets: string[] = [], questions: Question[] = []) {
   const errors: RowErrors = {}
   const name = row.name.trim()
   if (!name) errors.name = 'Required'
@@ -123,13 +134,20 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
   if (row.tshirt && !TSHIRTS.includes(row.tshirt as never)) errors.tshirt = 'Invalid size'
   if (cols.accessibility.show && cols.accessibility.required && !row.accessibility.trim()) errors.accessibility = 'Required'
   if (row.accessibility.length > 300) errors.accessibility = 'Too long'
+  const extra: Record<string, string> = {}
+  for (const q of questions) {
+    const a = String(row.extra?.[q.id] ?? '').trim().slice(0, 200)
+    if (a && q.kind === 'choice' && !q.options.includes(a)) errors.extra = `${q.label}: choose one of the options`
+    else if (!a && q.required) errors.extra = `${q.label} is required`
+    if (a) extra[q.id] = a
+  }
   const ok = Object.keys(errors).length === 0
   return {
     ok,
     errors,
     value: ok
       ? { name, age, gender: row.gender as 'Male' | 'Female', mobile: phone, email, sports: [...new Set(row.sports)],
-          skill: bestSkill(Object.values(skills)), skills, diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
+          skill: bestSkill(Object.values(skills)), skills, extra, diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
           kind: row.kind as 'member' | 'guest' }
       : null,
   }
@@ -141,7 +159,7 @@ const text = (max: number) => z.string().max(max).default('')
 /** Shape guard for anything arriving from a browser: wrong types or oversized values are rejected before any rule runs. */
 export const rowShape = z.object({
   name: text(200), age: z.union([z.string().max(10), z.number()]).transform((v) => String(v)).default(''), gender: text(20), mobile: text(30), email: text(200),
-  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), skills: z.record(z.string().max(60), z.string().max(20)).default({}), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
+  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), skills: z.record(z.string().max(60), z.string().max(20)).default({}), extra: z.record(z.string().max(10), z.string().max(300)).default({}), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
 })
 export const submissionShape = z.object({
   rows: z.array(rowShape).max(200),
@@ -205,4 +223,8 @@ export function skillsOf(p: { skills?: string; skill: string; sports: string }):
   const out: Record<string, string> = {}
   for (const sp of JSON.parse(p.sports || '[]') as string[]) out[sp] = m[sp] || p.skill || ''
   return out
+}
+
+export function extraOf(p: { extra?: string }): Record<string, string> {
+  try { return JSON.parse(p.extra || '{}') } catch { return {} }
 }
