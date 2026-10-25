@@ -26,7 +26,7 @@ export default async function SportRoster({ params, searchParams }: { params: Pr
     <main>
       <AutoRefresh seconds={5} />
       <p><Link href={`/c/${slug}/staff`}>{actor.kind === 'admin' || actor.staff.role === 'sports_all' ? 'All sports' : 'Home'}</Link></p>
-      <p><strong>Players</strong> · <Link href={`${base}/categories`}>Categories and results</Link></p>
+      <p><strong>Players</strong> · <Link href={`${base}/categories`}>Categories and results</Link> · <Link href={`/c/${slug}/staff/announce`}>Announcements</Link></p>
       <div className="person"><Pic src={sportIcon(sport)} size={56} /><div><h1 style={{ margin: 0 }}>{sport}</h1><span className="muted">{arrived} arrived of {all.length} registered · updates every 5 seconds</span></div></div>
       <p>
         <Link className={`tag ${arrivedOnly ? 'on' : ''}`} href={base}>Arrived only</Link>{' '}

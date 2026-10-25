@@ -566,3 +566,57 @@ test('registration grid: add, duplicate and delete people; skill is asked per sp
   await page.getByRole('button', { name: 'Clear person 1' }).click()
   await expect(page.locator('[data-r="0"][data-c="name"]')).toHaveValue('')
 })
+
+test('announcements: admin posts, every public page shows the ticker, a gate login cannot post, removal clears it', async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await page.goto('/c/jsg/admin/login')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('Admin password').fill('e2e-password')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Admin console' })).toBeVisible()
+  await page.goto('/c/jsg/staff/announce')
+  await page.waitForLoadState('networkidle')
+  await page.getByLabel('Message').fill('Badminton semi-finals moved to Court 2 at 11:30')
+  await page.getByLabel('Type').selectOption('urgent')
+  await page.getByRole('button', { name: 'Announce now' }).click()
+  await expect(page.getByText('Announcement is live on every page')).toBeVisible()
+
+  const visitor = await (await browser.newContext()).newPage()
+  await visitor.goto('/c/jsg/e/1')
+  const bar = visitor.getByRole('region', { name: 'Announcements' })
+  await expect(bar).toContainText('URGENT: Badminton semi-finals moved to Court 2 at 11:30')
+  await expect(bar).toHaveClass(/urgent/)
+  // A message posted while the page is open appears without a reload (the ticker polls).
+  await page.getByLabel('Message').fill('Lunch is served at 1 pm')
+  await page.getByLabel('Type').selectOption('info')
+  await page.getByRole('button', { name: 'Announce now' }).click()
+  await expect(bar).toContainText('Lunch is served at 1 pm', { timeout: 30_000 })
+
+  // Gate volunteers cannot announce.
+  await page.goto('/c/jsg/admin/staff')
+  await page.getByLabel('Name', { exact: true }).fill('Gate Helper')
+  await page.getByLabel('Role').selectOption('gate')
+  await page.getByRole('button', { name: 'Create login and invite' }).click()
+  const row = page.locator('section', { hasText: 'Copy these now' }).locator('tbody tr').first()
+  const user = (await row.locator('td').nth(1).textContent())!.trim()
+  const pass = (await row.locator('td').nth(2).textContent())!.trim()
+  const gate = await (await browser.newContext()).newPage()
+  await gate.goto('/c/jsg/staff/login')
+  await gate.waitForLoadState('networkidle')
+  await gate.getByLabel('Username').fill(user)
+  await gate.getByLabel('Password').fill(pass)
+  await gate.getByRole('button', { name: 'Sign in' }).click()
+  await gate.goto('/c/jsg/staff/announce')
+  await expect(gate).not.toHaveURL(/announce/)
+
+  // Remove both: the bar goes away.
+  await page.goto('/c/jsg/staff/announce')
+  for (let left = await page.getByRole('button', { name: 'Remove' }).count(); left > 0; left--) {
+    await page.waitForLoadState('networkidle')
+    await page.getByRole('button', { name: 'Remove' }).first().click()
+    await expect(page.getByRole('button', { name: 'Remove' })).toHaveCount(left - 1)
+  }
+  // What is left is only the invitation to turn alerts on.
+  await expect(visitor.getByRole('region', { name: 'Announcements' })).not.toContainText('Lunch is served', { timeout: 30_000 })
+  await expect(visitor.getByRole('region', { name: 'Announcements' })).toContainText('Get a notification')
+})

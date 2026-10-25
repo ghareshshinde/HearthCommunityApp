@@ -50,3 +50,7 @@ Not yet built: photos, pairing and results with the podium, live board, feedback
 ## Sports operations
 
 Sport admins open `Players > Categories and results` for their sport, create a category, add arrived players, make the draw, publish rounds and tap winners. Event admin can lock results (`/c/jsg/admin/events/1/competitions`). Public winners and brackets: `/c/jsg/e/1/results`.
+
+## Announcements
+
+Admins and sports admins post at `/c/jsg/staff/announce`. Messages scroll along the bottom of every page (urgent ones flash red) and expire on their own or when removed. Visitors can tap Alerts to get a notification while the site is open.

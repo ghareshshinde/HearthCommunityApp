@@ -19,6 +19,7 @@ export default async function StaffHome({ params }: { params: Promise<{ slug: st
     <main>
       <h1>{ev?.title ?? 'Staff'}</h1>
       <p className="muted">Signed in as {actor.label}{s ? ` (${s.role === 'gate' ? 'gate volunteer' : 'common sports admin'})` : ''}</p>
+      {(actor.kind === 'admin' || s?.role === 'sports_all') && <p><Link className="btn outline" href={`/c/${slug}/staff/announce`}>Announcements</Link></p>}
       {showGate && <p><Link className="btn" href={`/c/${slug}/staff/gate`}>Open check-in</Link></p>}
       {showSports && (
         <>

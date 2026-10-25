@@ -161,6 +161,18 @@ create table if not exists partner_request (
   at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   unique (event_id, sport, from_pid)
 );
+create table if not exists announcement (
+  id integer primary key autoincrement,
+  community_id integer not null references community(id),
+  message text not null,
+  level text not null default 'info',
+  created_by text not null,
+  created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  expires_at text not null,
+  removed_at text,
+  removed_by text
+);
+create index if not exists announcement_live on announcement (community_id, expires_at);
 create table if not exists audit_log (
   id integer primary key autoincrement,
   community_id integer references community(id),

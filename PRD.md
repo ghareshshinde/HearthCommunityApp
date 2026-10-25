@@ -723,3 +723,6 @@ The amendments below define an alternative MVP that is built now. For this track
 
 ### AM10. Sports operations (built)
 Per-sport coordinators (and admin) create categories (singles, doubles, team; gender and age filters), enter only players who have arrived at the gate, seed, make the draw (knockout with byes and third place, or round robin), publish rounds, and record results with two taps. Concurrent edits are guarded by a match version, corrections are blocked once the next round is played, and the event admin can lock a category. Public results page shows winners and published brackets with name search; no contact details are exposed. The projector live board is the next step.
+
+### AM11. Registration form and announcements (built)
+Skill level is asked per chosen sport. Diet options are chosen by the event owner in the event setup; with none ticked the form does not ask about diet and nothing is assumed. Admins, common sports admins and sport admins can post announcements (normal or urgent, with an expiry). They appear in a scrolling bar at the bottom of every community page, and as a browser notification for people who tap "Alerts" while the site is open. True background push to closed phones needs HTTPS web push and is not part of this build.

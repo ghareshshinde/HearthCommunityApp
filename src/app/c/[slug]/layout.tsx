@@ -2,6 +2,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { brandingToCss } from '@/lib/branding/css'
 import { requireCommunity } from '@/lib/session'
+import { liveAnnouncements } from '@/lib/announcements'
+import Ticker from '@/components/Ticker'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +26,7 @@ export default async function CommunityLayout({ children, params }: { children: 
         </Link>
       </header>
       {children}
+      <Ticker slug={slug} initial={liveAnnouncements(c.id).map(({ id, message, level }) => ({ id, message, level }))} />
     </>
   )
 }
