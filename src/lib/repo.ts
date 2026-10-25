@@ -40,7 +40,9 @@ export function ensureBootstrap() {
       textPrimary: '#0f172a', textSecondary: '#475569', border: '#cbd5e1', link: '#1e4a9e' },
     darkColors: null,
   }))
-  mk.run('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', hashPassword(pw))
+  // The dummy second community is for development and tests only; a live site gets JSG alone unless SEED_DEMO_EVENT=true.
+  if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_EVENT === 'true')
+    mk.run('kitty-demo', 'Sunday Kitty Group (demo)', 'unregistered', 'Hyderabad', 'Dummy kitty party group.', hashPassword(pw))
   if (process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_EVENT === 'true') {
     const jsg = one<{ id: number }>("select id from community where slug = 'jsg'")!.id
     const inDays = (d: number) => new Date(Date.now() + d * 86400_000).toISOString()

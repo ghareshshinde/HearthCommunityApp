@@ -23,36 +23,68 @@ ever saves newer data, the app refuses to overwrite it and shows "We could not s
 | `NOTIFY_COPY_TO` | `jsghyd@gmail.com` (comma-separate for more) | A copy of every new registration goes to this address. |
 | max instances | 1 | Required. |
 
-## Steps (Cloud Shell, once)
+## Steps (Cloud Shell, once, about 10 minutes)
 
+You need a Google Cloud project with billing switched on. Open Cloud Shell (the terminal icon at the top right of the Cloud console).
+
+**1. Get the code and set your names**
 ```bash
-PROJECT=your-project-id
-REGION=asia-south1
-BUCKET=$PROJECT-hearth-data
-
+git clone https://github.com/ghareshshinde/HearthCommunityApp
+cd HearthCommunityApp
+export PROJECT=your-project-id          # find it at the top of the console
+export REGION=asia-south1               # Mumbai
+export BUCKET=$PROJECT-hearth-data
 gcloud config set project $PROJECT
+```
+A private repo asks for sign-in: use `gh auth login` first (Cloud Shell has `gh`), or a personal access token.
+
+**2. Switch on the services and create the storage bucket**
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com storage.googleapis.com
 gcloud storage buckets create gs://$BUCKET --location=$REGION --uniform-bucket-level-access
-gcloud storage buckets update gs://$BUCKET --versioning   # keeps older snapshots as a second safety net
+gcloud storage buckets update gs://$BUCKET --versioning
+```
 
-# Secrets
+**3. Store the two secrets** (replace the admin password with your own; keep it somewhere safe)
+```bash
 printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create hearth-session-secret --data-file=-
-printf '%s' 'choose-a-strong-admin-password' | gcloud secrets create hearth-admin-password --data-file=-
+printf '%s' 'CHOOSE-A-STRONG-ADMIN-PASSWORD' | gcloud secrets create hearth-admin-password --data-file=-
+```
 
-# Deploy straight from the repository (uses the Dockerfile)
-gcloud run deploy hearth --source . --region $REGION --allow-unauthenticated \
-  --max-instances 1 --min-instances 0 \
-  --set-env-vars GCS_BUCKET=$BUCKET,SEED_DEMO_EVENT=false \
-  --set-secrets SESSION_SECRET=hearth-session-secret:latest,ADMIN_PASSWORD=hearth-admin-password:latest
-
-# Let the service write to the bucket and read its secrets
-SA=$(gcloud run services describe hearth --region $REGION --format='value(spec.template.spec.serviceAccountName)')
-[ -z "$SA" ] && SA=$(gcloud projects describe $PROJECT --format='value(projectNumber)')-compute@developer.gserviceaccount.com
+**4. Let the service use them**
+```bash
+PN=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+SA=$PN-compute@developer.gserviceaccount.com
 gcloud storage buckets add-iam-policy-binding gs://$BUCKET --member=serviceAccount:$SA --role=roles/storage.objectUser
 gcloud secrets add-iam-policy-binding hearth-session-secret --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor
 gcloud secrets add-iam-policy-binding hearth-admin-password --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor
 ```
 
-Open the service URL, then `/c/jsg/admin` and sign in with the admin password. Add a custom domain later if you want one.
+**5. Deploy** (the first build takes about 5 minutes; say yes if it offers to create an Artifact Registry repository)
+```bash
+gcloud run deploy hearth --source . --region $REGION --allow-unauthenticated \
+  --max-instances 1 --min-instances 0 --memory 512Mi \
+  --set-env-vars GCS_BUCKET=$BUCKET \
+  --set-secrets SESSION_SECRET=hearth-session-secret:latest,ADMIN_PASSWORD=hearth-admin-password:latest
+```
+
+**6. Tell the app its own address** (used in emails and share previews)
+```bash
+URL=$(gcloud run services describe hearth --region $REGION --format='value(status.url)')
+gcloud run services update hearth --region $REGION --update-env-vars APP_URL=$URL
+echo $URL
+```
+
+**7. Open it**: `URL/c/jsg` is the public site and `URL/c/jsg/admin` is the admin sign-in (the password from step 3).
+Then create the event in the admin console: New event, check the sports and dates, set Status to Published.
+
+**Email (later, when ready)**: add `SMTP_URL`, `EMAIL_FROM` and `NOTIFY_COPY_TO` with
+`gcloud run services update hearth --region $REGION --update-env-vars EMAIL_FROM='JSG Hyderabad <jsghyd@gmail.com>',NOTIFY_COPY_TO=jsghyd@gmail.com`
+and put the SMTP URL (it contains a password) in Secret Manager:
+`printf '%s' 'smtps://jsghyd%40gmail.com:APP-PASSWORD@smtp.gmail.com:465' | gcloud secrets create hearth-smtp-url --data-file=-`, grant the same accessor role as in step 4, then
+`gcloud run services update hearth --region $REGION --update-secrets SMTP_URL=hearth-smtp-url:latest`.
+
+**Updating later**: after new code is pushed to GitHub, run `git pull` and the step 5 command again. Registrations are kept in the bucket.
 
 ## Google AI Studio
 
