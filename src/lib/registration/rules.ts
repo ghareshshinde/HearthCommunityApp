@@ -3,7 +3,8 @@ import { z } from 'zod'
 export const GENDERS = ['Male', 'Female'] as const
 export const KINDS = ['member', 'guest'] as const
 export const SKILLS = ['beginner', 'casual', 'competitive'] as const
-export const DIETS = ['Vegetarian', 'Jain', 'Chauvihar', 'Vegan', 'Other'] as const // Vegetarian is the default (A4)
+/** Suggestions the event owner can tick when setting up an event. Nothing is assumed: an event with none ticked asks no diet question. */
+export const DIETS = ['Vegetarian', 'Jain', 'Chauvihar', 'Vegan', 'Other'] as const
 export const TSHIRTS = ['4-6y', '8-10y', '12-14y', 'S', 'M', 'L', 'XL', 'XXL'] as const
 export const SOFT_LIMIT = 8
 export const DEFAULT_SPORTS = ['Chess', 'Carrom', 'Cricket', 'Badminton', 'Table Tennis', 'Pickleball']
@@ -17,12 +18,18 @@ export const DEFAULT_COLUMNS: ColumnConfig = {
   tshirt: { show: true, required: false },
   accessibility: { show: true, required: false },
 }
+function parseDiets(v: unknown): string[] {
+  return Array.isArray(v) ? [...new Set(v.map((d) => String(d).trim().slice(0, 30)).filter(Boolean))].slice(0, 12) : []
+}
 export function columnConfig(raw: string | null | undefined): ColumnConfig {
   try {
-    const c = JSON.parse(raw || '{}').columns ?? {}
-    return Object.fromEntries(
+    const j = JSON.parse(raw || '{}'), c = j.columns ?? {}
+    const cfg = Object.fromEntries(
       (Object.keys(DEFAULT_COLUMNS) as OptionalColumn[]).map((k) => [k, { ...DEFAULT_COLUMNS[k], ...c[k] }]),
     ) as ColumnConfig
+    // The diet question exists only when the event owner has chosen diet options.
+    cfg.diet = { ...cfg.diet, show: parseDiets(j.diets).length > 0 }
+    return cfg
   } catch {
     return DEFAULT_COLUMNS
   }
@@ -34,7 +41,7 @@ const englishName = (max: number) =>
   z.string().trim().min(1, 'Required').max(max).regex(ENGLISH_NAME, 'Use English letters only')
 
 export type AgeLimit = { min?: number; max?: number }
-export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean }
+export type EventSettings = { capacity: Record<string, number>; ages: Record<string, AgeLimit>; waiver: string; gates: string[]; spot: { open: boolean; cap: number }; approvalRequired: boolean; contactEmailRequired: boolean; diets: string[] }
 export const DEFAULT_WAIVER =
   'I accept the injury waiver for everyone listed. For children I am the parent or guardian and consent to their participation.'
 
@@ -52,7 +59,7 @@ export function eventSettings(raw: string | null | undefined): EventSettings {
   const gates = Array.isArray(c.gates) ? (c.gates as unknown[]).map((g) => String(g).trim()).filter(Boolean).slice(0, 12) : []
   const sp = (c.spot ?? {}) as { open?: boolean; cap?: number }
   // Required unless an admin switches it off: the emailed link is how a family gets back to its registration.
-  return { contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
+  return { diets: parseDiets(c.diets), contactEmailRequired: c.contactEmailRequired !== false, approvalRequired: c.approvalRequired === true, gates, spot: { open: sp.open === true, cap: Math.max(0, Math.floor(Number(sp.cap) || 0)) }, capacity, ages, waiver: typeof c.waiver === 'string' && c.waiver.trim() ? c.waiver : DEFAULT_WAIVER }
 }
 
 export const normalizeMobile = (v: string) => v.replace(/[\s-]/g, '').replace(/^(\+91|91|0)(?=\d{10}$)/, '')
@@ -60,17 +67,17 @@ const mobile = z.string().transform(normalizeMobile).refine((v) => /^\d{10}$/.te
 
 export type ParticipantInput = {
   name: string; age: string | number; gender: string; mobile: string; email: string; sports: string[]
-  skill: string; diet: string; tshirt: string; accessibility: string; kind: string
+  skill: string; skills: Record<string, string>; diet: string; tshirt: string; accessibility: string; kind: string
 }
 export const blankRow = (): ParticipantInput => ({
-  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', diet: 'Vegetarian',
+  name: '', age: '', gender: '', mobile: '', email: '', sports: [], skill: '', skills: {}, diet: '',
   tshirt: '', accessibility: '', kind: 'member',
 })
 
 export type RowErrors = Partial<Record<keyof ParticipantInput, string>>
 
 /** Validates one row against the event. Returns cleaned values or per-cell errors. Shared by browser and server. */
-export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig, ages: Record<string, AgeLimit> = {}) {
+export function validateRow(row: ParticipantInput, eventSports: string[], cols: ColumnConfig, ages: Record<string, AgeLimit> = {}, diets: string[] = []) {
   const errors: RowErrors = {}
   const name = row.name.trim()
   if (!name) errors.name = 'Required'
@@ -101,9 +108,17 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
       }
     }
   }
-  if (cols.skill.show && cols.skill.required && !SKILLS.includes(row.skill as never)) errors.skill = 'Choose a level'
-  if (row.skill && !SKILLS.includes(row.skill as never)) errors.skill = 'Choose a level'
-  if (!DIETS.includes(row.diet as never)) errors.diet = 'Choose a diet'
+  // Skill is per sport: a person can be a beginner at Chess and competitive at Badminton. `skill` is a fallback for pasted rows and older callers.
+  const skills: Record<string, string> = {}
+  for (const sp of row.sports) {
+    const lvl = row.skills?.[sp] || row.skill || ''
+    if (lvl && !SKILLS.includes(lvl as never)) errors.skill = 'Choose a level'
+    else if (!lvl && cols.skill.show && cols.skill.required && !errors.skill) errors.skill = row.sports.length > 1 ? 'Choose a level for each sport' : 'Choose a level'
+    skills[sp] = lvl
+  }
+  const diet = cols.diet.show && diets.length ? row.diet : ''
+  if (diet && !diets.includes(diet)) errors.diet = 'Choose a diet'
+  if (cols.diet.show && cols.diet.required && !diet) errors.diet = 'Choose a diet'
   if (cols.tshirt.show && cols.tshirt.required && !row.tshirt) errors.tshirt = 'Required'
   if (row.tshirt && !TSHIRTS.includes(row.tshirt as never)) errors.tshirt = 'Invalid size'
   if (cols.accessibility.show && cols.accessibility.required && !row.accessibility.trim()) errors.accessibility = 'Required'
@@ -114,17 +129,19 @@ export function validateRow(row: ParticipantInput, eventSports: string[], cols: 
     errors,
     value: ok
       ? { name, age, gender: row.gender as 'Male' | 'Female', mobile: phone, email, sports: [...new Set(row.sports)],
-          skill: row.skill, diet: row.diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
+          skill: bestSkill(Object.values(skills)), skills, diet, tshirt: row.tshirt, accessibility: row.accessibility.trim(),
           kind: row.kind as 'member' | 'guest' }
       : null,
   }
 }
 
+export const bestSkill = (levels: string[]) => [...SKILLS].reverse().find((s) => levels.includes(s)) ?? ''
+
 const text = (max: number) => z.string().max(max).default('')
 /** Shape guard for anything arriving from a browser: wrong types or oversized values are rejected before any rule runs. */
 export const rowShape = z.object({
   name: text(200), age: z.union([z.string().max(10), z.number()]).transform((v) => String(v)).default(''), gender: text(20), mobile: text(30), email: text(200),
-  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
+  sports: z.array(z.string().max(60)).max(20).default([]), skill: text(20), skills: z.record(z.string().max(60), z.string().max(20)).default({}), diet: text(30), tshirt: text(20), accessibility: text(1000), kind: text(20),
 })
 export const submissionShape = z.object({
   rows: z.array(rowShape).max(200),
@@ -174,9 +191,18 @@ export function parsePaste(text: string, eventSports: string[]): ParticipantInpu
       else if (k === 'gender') r.gender = ['male', 'female'].includes(v.toLowerCase()) ? cap(v) : ''
       else if (k === 'kind') r.kind = v.toLowerCase() === 'guest' ? 'guest' : 'member'
       else if (k === 'skill') r.skill = v.toLowerCase()
-      else if (k === 'diet') r.diet = DIETS.find((d) => d.toLowerCase() === v.toLowerCase()) ?? 'Vegetarian'
+      else if (k === 'diet') r.diet = v
       else if (v) (r as Record<string, unknown>)[k] = v
     })
     return r
   })
+}
+
+/** Level per sport for a stored participant; falls back to the single older `skill` value. */
+export function skillsOf(p: { skills?: string; skill: string; sports: string }): Record<string, string> {
+  let m: Record<string, string> = {}
+  try { m = JSON.parse(p.skills || '{}') } catch { /* fall back */ }
+  const out: Record<string, string> = {}
+  for (const sp of JSON.parse(p.sports || '[]') as string[]) out[sp] = m[sp] || p.skill || ''
+  return out
 }

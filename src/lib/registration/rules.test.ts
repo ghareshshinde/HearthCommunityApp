@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, normalizeMobile, parsePaste, validateRow } from './rules'
+import { DEFAULT_COLUMNS, DEFAULT_SPORTS, blankRow, columnConfig, normalizeMobile, parsePaste, validateRow } from './rules'
 
 const row = (o = {}) => ({ ...blankRow(), name: 'Asha Shah', age: '34', gender: 'Female', mobile: '98765 43210', sports: ['Chess'], skill: 'casual', ...o })
 
@@ -42,6 +42,27 @@ describe('parsePaste', () => {
     const rows = parsePaste('Asha Shah\t34\tfemale\t9876543210\t\tChess, carrom\tcasual\tJain\tM\t\tguest\nRaj\t9\tMale', DEFAULT_SPORTS)
     expect(rows).toHaveLength(2)
     expect(rows[0]).toMatchObject({ name: 'Asha Shah', gender: 'Female', sports: ['Chess', 'Carrom'], diet: 'Jain', kind: 'guest' })
-    expect(rows[1]).toMatchObject({ name: 'Raj', age: '9', kind: 'member', diet: 'Vegetarian' })
+    expect(rows[1]).toMatchObject({ name: 'Raj', age: '9', kind: 'member', diet: '' })
+  })
+})
+
+describe('skill per sport and event diets', () => {
+  const sports = ['Chess', 'Badminton']
+  it('needs a level for every chosen sport and keeps them separate', () => {
+    const r = row({ sports: ['Chess', 'Badminton'], skill: '', skills: { Chess: 'beginner' } })
+    expect(validateRow(r, sports, DEFAULT_COLUMNS).errors.skill).toMatch(/each sport/)
+    const ok = validateRow({ ...r, skills: { Chess: 'beginner', Badminton: 'competitive' } }, sports, DEFAULT_COLUMNS)
+    expect(ok.ok).toBe(true)
+    expect(ok.value!.skills).toEqual({ Chess: 'beginner', Badminton: 'competitive' })
+    expect(ok.value!.skill).toBe('competitive')
+  })
+  it('asks no diet question unless the event offers options, and only accepts those options', () => {
+    const none = validateRow(row({ diet: 'Jain' }), sports, DEFAULT_COLUMNS)
+    expect(none.value!.diet).toBe('')
+    const cols = columnConfig(JSON.stringify({ diets: ['Jain', 'Vegan'] }))
+    expect(cols.diet.show).toBe(true)
+    expect(validateRow(row({ diet: 'Jain' }), sports, cols, {}, ['Jain', 'Vegan']).ok).toBe(true)
+    expect(validateRow(row({ diet: 'Other' }), sports, cols, {}, ['Jain', 'Vegan']).errors.diet).toBeTruthy()
+    expect(columnConfig('{}').diet.show).toBe(false)
   })
 })

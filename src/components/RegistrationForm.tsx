@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  DIETS, GENDERS, SKILLS, SOFT_LIMIT, TSHIRTS, blankRow, parsePaste, validateRow,
+  GENDERS, SKILLS, SOFT_LIMIT, TSHIRTS, blankRow, parsePaste, validateRow,
   type ColumnConfig, type ParticipantInput, type RowErrors,
 } from '@/lib/registration/rules'
 import type { Contact, SubmitResult } from '@/lib/repo'
@@ -16,6 +16,7 @@ type Props = {
   sports: string[]
   columns: ColumnConfig
   ages?: Record<string, { min?: number; max?: number }>
+  diets?: string[]
   waiver: string
   emailRequired?: boolean
   seatsLeft: Record<string, number | null>
@@ -28,8 +29,9 @@ type Props = {
 
 const DRAFT_DAYS = 7
 const NO_AGES = {}
+const NO_DIETS: string[] = []
 
-export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, waiver, emailRequired = true, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
+export default function RegistrationForm({ slug, eventId, sports, columns, ages = NO_AGES, diets = NO_DIETS, waiver, emailRequired = true, seatsLeft, initialRows, initialContact, submit, submitLabel, draftKey }: Props) {
   const router = useRouter()
   const [rows, setRows] = useState<ParticipantInput[]>(initialRows?.length ? initialRows : [blankRow()])
   const [contact, setContact] = useState<Contact>({ registrantName: '', registrantMobile: '', registrantEmail: '', emergencyName: '', emergencyMobile: '', waiver: false, ...initialContact })
@@ -37,6 +39,9 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
   const [contactErrors, setContactErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [ready, setReady] = useState(false) // buttons stay off until the page can respond to them
+  const [note, setNote] = useState('')
+  const [flash, setFlash] = useState<number | null>(null)
   const [draftNote, setDraftNote] = useState('')
   const [showErrors, setShowErrors] = useState(false)
   const tableRef = useRef<HTMLTableElement>(null)
@@ -44,6 +49,8 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
   const [submissionKey] = useState(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `k${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`))
   const key = draftKey ?? `hearth-draft-${eventId}`
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setReady(true), [])
   // TR9: draft kept 7 days in this browser.
   useEffect(() => {
     if (initialRows) return
@@ -52,7 +59,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
       if (d && Date.now() - d.at < DRAFT_DAYS * 86400_000) {
         // localStorage exists only in the browser, so restoring must happen after mount.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setRows(d.rows); setContact(d.contact); setDraftNote('Draft restored')
+        setRows((d.rows as ParticipantInput[]).map((r) => ({ ...blankRow(), ...r }))); setContact(d.contact); setDraftNote('Draft restored')
       }
     } catch { /* storage unavailable */ }
   }, [key, initialRows])
@@ -64,7 +71,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
     return () => clearTimeout(t)
   }, [rows, contact, key, initialRows])
 
-  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns, ages)), [rows, sports, columns, ages])
+  const live = useMemo(() => rows.map((r) => validateRow(r, sports, columns, ages, diets)), [rows, sports, columns, ages, diets])
   const summary = {
     participants: rows.length,
     members: rows.filter((r) => r.kind === 'member').length,
@@ -74,19 +81,32 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
 
   const set = (i: number, k: keyof ParticipantInput, v: string | string[]) =>
     setRows((rs) => rs.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
-  const addRow = (focusIndex?: number) => {
-    setRows((rs) => [...rs, blankRow()])
-    setTimeout(() => tableRef.current?.querySelector<HTMLElement>(`[data-r="${focusIndex ?? rows.length}"][data-c="name"]`)?.focus(), 30)
+  /** Brings the row at `index` into view, highlights it for a moment and puts the cursor in its name cell. */
+  const show = (index: number) => {
+    setFlash(index)
+    setTimeout(() => {
+      const el = tableRef.current?.querySelector<HTMLElement>(`[data-row="${index}"]`)
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      tableRef.current?.querySelector<HTMLElement>(`[data-r="${index}"][data-c="name"]`)?.focus({ preventScroll: true })
+    }, 60)
+    setTimeout(() => setFlash(null), 1600)
   }
-  const dup = (i: number) => setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i], name: '', mobile: '', email: '' }, ...rs.slice(i + 1)])
-  const del = (i: number) => setRows((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : [blankRow()]))
+  const addRow = () => { setRows((rs) => [...rs, blankRow()]); show(rows.length); setNote(`Person ${rows.length + 1} added`) }
+  const dup = (i: number) => {
+    setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i], sports: [...rs[i].sports], skills: { ...rs[i].skills }, name: '', mobile: '', email: '' }, ...rs.slice(i + 1)])
+    show(i + 1); setNote(`Person ${i + 1} duplicated: enter the new name`)
+  }
+  const del = (i: number) => {
+    setRows((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : [blankRow()]))
+    setRowErrors({}); setNote(rows.length > 1 ? `Person ${i + 1} removed` : 'Row cleared')
+  }
 
   // TR6: arrows move between rows in the same column; Enter in the last row adds a row.
   function onKey(e: React.KeyboardEvent, i: number, c: string) {
     const t = e.target as HTMLElement
     if (e.key === 'Enter' && t.tagName !== 'BUTTON' && t.tagName !== 'TEXTAREA') {
       e.preventDefault()
-      if (i === rows.length - 1) addRow(i + 1)
+      if (i === rows.length - 1) addRow()
       else tableRef.current?.querySelector<HTMLElement>(`[data-r="${i + 1}"][data-c="${c}"]`)?.focus()
     } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && t.tagName !== 'SELECT') {
       const n = i + (e.key === 'ArrowDown' ? 1 : -1)
@@ -183,7 +203,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} data-row={i}>
+            <tr key={i} data-row={i} className={flash === i ? 'flash' : undefined}>
               <td data-label="#">{i + 1}</td>
               {cell('Name', i, 'name', inp(i, 'name', { autoComplete: 'off' }))}
               {cell('Age', i, 'age', inp(i, 'age', { inputMode: 'numeric', style: { width: '4.5rem' } }))}
@@ -199,20 +219,26 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
                     </label>
                   ))}
                 </div>)}
-              {columns.skill.show && cell('Skill level', i, 'skill', sel(i, 'skill', SKILLS))}
-              {columns.diet.show && cell('Diet', i, 'diet', sel(i, 'diet', DIETS, false))}
+              {columns.skill.show && cell('Skill level', i, 'skill', r.sports.length === 0
+                ? <small className="muted">Pick sports first</small>
+                : <div className="skills">{r.sports.map((sp) => (
+                    <label key={sp} className="skillrow"><span>{sp}</span>
+                      <select data-r={i} data-c={`skill-${sp}`} aria-label={`Skill level for ${sp}`} value={r.skills[sp] || r.skill} onChange={(e) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, skills: { ...x.skills, [sp]: e.target.value } } : x)))}>
+                        <option value="">Select</option>{SKILLS.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select></label>))}</div>)}
+              {columns.diet.show && cell('Diet', i, 'diet', sel(i, 'diet', diets))}
               {columns.tshirt.show && cell('T-shirt', i, 'tshirt', sel(i, 'tshirt', TSHIRTS))}
               {columns.accessibility.show && cell('Accessibility needs', i, 'accessibility', inp(i, 'accessibility'))}
               {cell('Member or Guest', i, 'kind', sel(i, 'kind', ['member', 'guest'], false))}
               <td className="actions">
-                <button type="button" onClick={() => dup(i)} title="Duplicate row">Duplicate</button>
-                <button type="button" onClick={() => del(i)} title="Delete row">Delete</button>
+                <button type="button" disabled={!ready} onClick={() => dup(i)} title="Duplicate this person" aria-label={`Duplicate person ${i + 1}`}>Duplicate</button>
+                <button type="button" disabled={!ready} onClick={() => del(i)} title="Delete this person" aria-label={`${rows.length > 1 ? "Delete" : "Clear"} person ${i + 1}`}>{rows.length > 1 ? 'Delete' : 'Clear'}</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p><button type="button" className="btn outline" onClick={() => addRow()}>Add person</button> <span className="muted">{draftNote}</span></p>
+      <p><button type="button" className="btn outline" disabled={!ready} onClick={() => addRow()}>Add person</button> <span className="muted" role="status">{note || draftNote}</span></p>
       {rows.length > SOFT_LIMIT && <p className="warn" role="status">You are registering more than {SOFT_LIMIT} people. You can continue, but please check the list.</p>}
 
       <p className="summary" aria-live="polite">
@@ -225,7 +251,7 @@ export default function RegistrationForm({ slug, eventId, sports, columns, ages 
       </label>
       {contactErrors.waiver && <small role="alert" className="cellerr">{contactErrors.waiver}</small>}
       {formError && <p role="alert" className="cellerr">{formError}</p>}
-      <p><button className="btn" disabled={busy}>{busy ? 'Saving…' : submitLabel}</button></p>
+      <p><button className="btn" disabled={busy || !ready}>{busy ? 'Saving…' : submitLabel}</button></p>
     </form>
   )
 }

@@ -91,12 +91,12 @@ export default async function Gate({ params, searchParams }: { params: Promise<{
               : <p style={{ color: 'var(--color-success)', fontWeight: 600 }}>Everyone on this ticket is already in.</p>}
           </form>
           )}
-          {settings.spot.open && ts?.valid && <WalkInForm slug={slug} eventId={ev.id} sports={sports} registrationId={reg.id} ticket={sp.t!} title="Add someone to this family (walk-in)" />}
+          {settings.spot.open && ts?.valid && <WalkInForm slug={slug} eventId={ev.id} sports={sports} diets={settings.diets} registrationId={reg.id} ticket={sp.t!} title="Add someone to this family (walk-in)" />}
         </section>
       )}
 
       {settings.spot.open
-        ? <WalkInForm slug={slug} eventId={ev.id} sports={sports} registrationId={null} ticket="" title="New walk-in (separate entry)" />
+        ? <WalkInForm slug={slug} eventId={ev.id} sports={sports} diets={settings.diets} registrationId={null} ticket="" title="New walk-in (separate entry)" />
         : <p className="muted">Spot registration is closed. The admin can open it in the Staff page.</p>}
     </main>
   )

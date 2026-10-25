@@ -1,6 +1,6 @@
 import { getDb } from './db'
 import { hashPassword, newRef, newToken } from './auth'
-import { columnConfig, eventSettings, validateRow, contactSchema, contactSchemaFor, submissionShape, type ParticipantInput } from './registration/rules'
+import { columnConfig, eventSettings, skillsOf, validateRow, contactSchema, contactSchemaFor, submissionShape, type ParticipantInput } from './registration/rules'
 import { resolveBranding } from './branding/resolve'
 import { makeTicket } from './ticket'
 
@@ -18,7 +18,7 @@ export type RegistrationRow = {
 }
 export type ParticipantRow = {
   id: number; community_id: number; event_id: number; registration_id: number; name: string; age: number; gender: 'Male' | 'Female'
-  mobile: string; email: string; sports: string; skill: string; diet: string; tshirt: string; accessibility: string
+  mobile: string; email: string; sports: string; skill: string; skills: string; diet: string; tshirt: string; accessibility: string
   kind: 'member' | 'guest'; verified: number; registered_at: string; waitlist: string
   source: string; checked_in_at: string | null; checked_in_by: string | null; checked_in_gate: string | null
 }
@@ -113,14 +113,14 @@ export function validateSubmission(ev: EventRow, rawContact: unknown, rawRows: u
   const contact = shaped.data.contact
   const rows = shaped.data.rows as ParticipantInput[]
   const cols = columnConfig(ev.config)
-  const ages = eventSettings(ev.config).ages
+  const { ages, diets } = eventSettings(ev.config)
   const sports = JSON.parse(ev.sports) as string[]
   const c = contactSchemaFor(eventSettings(ev.config).contactEmailRequired).safeParse(contact)
   const contactErrors: Record<string, string> = {}
   if (!c.success) for (const i of c.error.issues) contactErrors[String(i.path[0])] = i.message
   const rowErrors: Record<number, Record<string, string>> = {}
   const clean = rows.map((r, i) => {
-    const v = validateRow(r, sports, cols, ages)
+    const v = validateRow(r, sports, cols, ages, diets)
     if (!v.ok) rowErrors[i] = v.errors as Record<string, string>
     return v.value
   })
@@ -155,7 +155,7 @@ type InsertOpts = { source?: string; checkedInBy?: string; gate?: string; now?: 
 function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnType<typeof validateRow>['value']>[], opts: InsertOpts = {}): { id: number; waitlist: string[] }[] {
   const cap = eventSettings(ev.config).capacity
   const used = sportUsage(ev.community_id, ev.id, rid)
-  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,diet,tshirt,accessibility,kind,source,checked_in_at,checked_in_by,checked_in_gate) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+  const st = db().prepare('insert into participant (community_id,event_id,registration_id,name,age,gender,mobile,email,sports,waitlist,skill,skills,diet,tshirt,accessibility,kind,source,checked_in_at,checked_in_by,checked_in_gate) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
   const made: { id: number; waitlist: string[] }[] = []
   for (const p of rows) {
     const waitlist: string[] = []
@@ -163,7 +163,7 @@ function insertParticipants(ev: EventRow, rid: number, rows: NonNullable<ReturnT
       if (cap[sp] && (used[sp] ?? 0) >= cap[sp]) waitlist.push(sp)
       else used[sp] = (used[sp] ?? 0) + 1
     }
-    const r = st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, p.diet, p.tshirt, p.accessibility, p.kind,
+    const r = st.run(ev.community_id, ev.id, rid, p.name, p.age, p.gender, p.mobile, p.email, JSON.stringify(p.sports), JSON.stringify(waitlist), p.skill, JSON.stringify(p.skills), p.diet, p.tshirt, p.accessibility, p.kind,
       opts.source ?? 'online', opts.checkedInBy ? (opts.now ?? new Date().toISOString()) : null, opts.checkedInBy ?? null, opts.checkedInBy ? (opts.gate ?? '') : null)
     made.push({ id: Number(r.lastInsertRowid), waitlist })
   }
@@ -387,7 +387,7 @@ export function addWalkIn(ev: EventRow, input: WalkInInput, now = new Date()): W
     if (used >= settings.spot.cap) return { ok: false, error: `The walk-in limit of ${settings.spot.cap} has been reached` }
   }
   if (!input.waiver) return { ok: false, error: 'Waiver must be accepted at the desk' }
-  const v = validateRow(input.person, JSON.parse(ev.sports), columnConfig(ev.config), settings.ages)
+  const v = validateRow(input.person, JSON.parse(ev.sports), columnConfig(ev.config), settings.ages, settings.diets)
   if (!v.ok || !v.value) return { ok: false, rowErrors: v.errors as Record<string, string> }
   const d = db()
   d.exec('begin')
@@ -418,7 +418,7 @@ export type RosterEntry = { id: number; name: string; age: number; gender: strin
 export function sportRoster(cid: number, eventId: number, sport: string): RosterEntry[] {
   return listRows(cid, eventId)
     .filter((r) => r.sportList.includes(sport))
-    .map((r) => ({ id: r.id, name: r.name, age: r.age, gender: r.gender, skill: r.skill, kind: r.kind, checkedInAt: r.checked_in_at, waitlisted: r.waitlistList.includes(sport), withdrawn: r.reg_status === 'cancelled' }))
+    .map((r) => ({ id: r.id, name: r.name, age: r.age, gender: r.gender, skill: skillsOf(r)[sport] ?? '', kind: r.kind, checkedInAt: r.checked_in_at, waitlisted: r.waitlistList.includes(sport), withdrawn: r.reg_status === 'cancelled' }))
 }
 
 // ---------- admin workspace ----------
@@ -450,7 +450,7 @@ export function filterRows(rows: Row[], f: Filters): Row[] {
   return out
 }
 
-export const EDITABLE = ['name', 'age', 'gender', 'mobile', 'email', 'skill', 'diet', 'tshirt', 'accessibility', 'kind', 'sports'] as const
+export const EDITABLE = ['name', 'age', 'gender', 'mobile', 'email', 'diet', 'tshirt', 'accessibility', 'kind', 'sports'] as const
 export type EditableField = (typeof EDITABLE)[number]
 
 /** Admin inline edit with a before/after audit entry (RW3). Validates the whole row after the change. */
@@ -458,11 +458,11 @@ export function adminEditParticipant(cid: number, id: number, field: EditableFie
   const p = one<ParticipantRow>('select * from participant where community_id = ? and id = ?', cid, id)
   if (!p) return { ok: false as const, error: 'Not found' }
   const ev = getEvent(cid, p.event_id)!
-  const row: ParticipantInput = { ...p, age: p.age, sports: JSON.parse(p.sports) }
+  const row: ParticipantInput = { ...p, age: p.age, sports: JSON.parse(p.sports), skills: skillsOf(p) }
   const before = field === 'sports' ? p.sports : String(p[field])
   if (field === 'sports') row.sports = value.split(',').map((s) => s.trim()).filter(Boolean)
   else (row as Record<string, unknown>)[field] = value
-  const v = validateRow(row, JSON.parse(ev.sports), columnConfig('{}'), eventSettings(ev.config).ages)
+  const v = validateRow(row, JSON.parse(ev.sports), columnConfig(ev.config), eventSettings(ev.config).ages, eventSettings(ev.config).diets)
   if (!v.ok && v.errors[field]) return { ok: false as const, error: v.errors[field] }
   const stored = field === 'sports' ? JSON.stringify(row.sports) : field === 'age' ? Number(value) : field === 'mobile' && v.value ? v.value.mobile : value
   db().prepare(`update participant set ${field} = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') where community_id = ? and id = ?`).run(stored, cid, id)

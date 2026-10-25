@@ -62,6 +62,7 @@ create table if not exists participant (
   sports text not null default '[]',
   waitlist text not null default '[]',   -- sports this person is waitlisted for (capacity reached)
   skill text not null default '',
+  skills text not null default '',
   diet text not null default 'Vegetarian',
   tshirt text not null default '',
   accessibility text not null default '',

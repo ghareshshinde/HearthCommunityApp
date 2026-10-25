@@ -1,5 +1,6 @@
 import { getDb } from './db'
 import { sportFormats } from './sports'
+import { skillsOf } from './registration/rules'
 import { audit, getEvent, listRows, type Row } from './repo'
 
 // ---------- types ----------
@@ -91,14 +92,16 @@ export function eligiblePlayers(cid: number, comp: Competition): Row[] {
   return listRows(cid, comp.event_id).filter((r) =>
     r.sportList.includes(comp.sport) && !r.waitlistList.includes(comp.sport) && r.reg_status !== 'cancelled' && !!r.checked_in_at && !taken.has(r.id) &&
     (!comp.gender || r.gender === comp.gender) && (!comp.min_age || r.age >= comp.min_age) && (!comp.max_age || r.age <= comp.max_age))
+    .map((r) => ({ ...r, skill: skillsOf(r)[comp.sport] ?? '' })) // level in this sport, not overall
 }
 
 export function listEntries(cid: number, compId: number): EntryWithPlayers[] {
   const entries = all<Entry>('select * from entry where community_id = ? and competition_id = ? order by seed, id', cid, compId)
-  const members = all<Player & { entry_id: number }>(
-    `select m.entry_id, p.id, p.name, p.age, p.gender, p.skill from entry_member m join participant p on p.id = m.participant_id and p.community_id = m.community_id
+  const sport = getCompetition(cid, compId)?.sport ?? ''
+  const members = all<Player & { entry_id: number; skills: string; sports: string }>(
+    `select m.entry_id, p.id, p.name, p.age, p.gender, p.skill, p.skills, p.sports from entry_member m join participant p on p.id = m.participant_id and p.community_id = m.community_id
      where m.community_id = ? and m.competition_id = ? order by p.name`, cid, compId)
-  return entries.map((e) => ({ ...e, players: members.filter((m) => m.entry_id === e.id).map(({ entry_id: _x, ...p }) => p) }))
+  return entries.map((e) => ({ ...e, players: members.filter((m) => m.entry_id === e.id).map(({ entry_id: _x, skills, sports, ...p }) => ({ ...p, skill: skillsOf({ skills, skill: p.skill, sports })[sport] ?? '' })) }))
 }
 
 export function addEntry(cid: number, compId: number, participantIds: number[], by: string, teamName = ''): Result<{ id: number }> {

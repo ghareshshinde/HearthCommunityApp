@@ -1,5 +1,5 @@
 import { saveEventAction } from '@/app/actions'
-import { DEFAULT_COLUMNS, DEFAULT_SPORTS, columnConfig, eventSettings, type OptionalColumn } from '@/lib/registration/rules'
+import { DEFAULT_COLUMNS, DEFAULT_SPORTS, DIETS, columnConfig, eventSettings, type OptionalColumn } from '@/lib/registration/rules'
 import { sportIcon } from '@/lib/sports'
 import Pic from '@/components/Pic'
 import { isoToIstInput } from '@/lib/time'
@@ -46,10 +46,17 @@ export default function EventForm({ slug, ev }: { slug: string; ev?: EventRow })
       <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="contactEmailRequired" defaultChecked={settings.contactEmailRequired} />The registrant&apos;s email is required (their ticket link is sent there)</label>
       <label style={{ flexDirection: 'row', gap: '.5rem', alignItems: 'center' }}><input type="checkbox" name="approvalRequired" defaultChecked={settings.approvalRequired} />QR tickets work only after an admin approves the registration</label>
       <label>Waiver wording<textarea name="waiver" rows={3} defaultValue={settings.waiver} /></label>
+      <fieldset><legend>Dietary options</legend>
+        <p className="muted" style={{ margin: '0 0 .5rem' }}>Tick what this event offers. If nothing is ticked, the form does not ask about diet.</p>
+        {DIETS.map((d) => (
+          <label key={d} style={{ flexDirection: 'row', gap: '.5rem' }}><input type="checkbox" name="diet_opt" value={d} defaultChecked={settings.diets.includes(d)} />{d}</label>
+        ))}
+        <label>Other options (comma separated)<input name="diet_custom" defaultValue={settings.diets.filter((d) => !(DIETS as readonly string[]).includes(d)).join(', ')} placeholder="e.g. Eggetarian" /></label>
+      </fieldset>
       <fieldset><legend>Form columns</legend>
         {(Object.keys(DEFAULT_COLUMNS) as OptionalColumn[]).map((k) => (
           <p key={k}>
-            <label style={{ flexDirection: 'row', gap: '.5rem' }}><input type="checkbox" name={`show_${k}`} defaultChecked={cols[k].show} />Show {k}</label>
+            {k === 'diet' ? <span className="muted">Shown when dietary options are ticked above</span> : <label style={{ flexDirection: 'row', gap: '.5rem' }}><input type="checkbox" name={`show_${k}`} defaultChecked={cols[k].show} />Show {k === 'skill' ? 'skill level (asked per sport)' : k}</label>}
             <label style={{ flexDirection: 'row', gap: '.5rem' }}><input type="checkbox" name={`req_${k}`} defaultChecked={cols[k].required} />Required</label>
           </p>
         ))}

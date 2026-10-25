@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { requireCommunity } from '@/lib/session'
 import { filterRows, getEvent, listRows, stats, type Filters } from '@/lib/repo'
 import { bulkActionForm } from '@/app/actions'
-import { DIETS, GENDERS, SKILLS, TSHIRTS } from '@/lib/registration/rules'
+import { GENDERS, TSHIRTS, eventSettings, skillsOf } from '@/lib/registration/rules'
 import { formatIst } from '@/lib/time'
 import EditableCell from '@/components/EditableCell'
 import ConfirmButton from '@/components/ConfirmButton'
@@ -13,6 +13,7 @@ export default async function Registrations({ params, searchParams }: { params: 
   const f = await searchParams
   const c = await requireCommunity(slug, true)
   const ev = getEvent(c.id, Number(id))
+  const diets = ev ? eventSettings(ev.config).diets : []
   if (!ev) notFound()
   const sports = JSON.parse(ev.sports) as string[]
   const all = listRows(c.id, ev.id)
@@ -30,7 +31,7 @@ export default async function Registrations({ params, searchParams }: { params: 
       <form className="fields" method="get">
         <label>Search<input name="q" defaultValue={f.q} placeholder="Name, mobile, reference" /></label>
         {opt('sport', 'Sport', sports)}{opt('gender', 'Gender', GENDERS)}{opt('kind', 'Member or guest', ['member', 'guest'])}
-        {opt('diet', 'Diet', DIETS)}{opt('status', 'Registration status', ['pending', 'approved', 'rejected', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}{opt('arrived', 'Arrived', ['yes', 'no'])}{opt('source', 'Source', ['online', 'spot'])}
+        {diets.length > 0 && opt('diet', 'Diet', diets)}{opt('status', 'Registration status', ['pending', 'approved', 'rejected', 'cancelled'])}{opt('verified', 'Verified', ['yes', 'no'])}{opt('arrived', 'Arrived', ['yes', 'no'])}{opt('source', 'Source', ['online', 'spot'])}
         <label>Min age<input name="minAge" defaultValue={f.minAge} inputMode="numeric" /></label>
         <label>Max age<input name="maxAge" defaultValue={f.maxAge} inputMode="numeric" /></label>
         <label>Sort by<select name="sort" defaultValue={f.sort ?? 'registered_at'}>{['registered_at', 'name', 'age', 'gender', 'kind', 'reg_ref', 'diet'].map((v) => <option key={v}>{v}</option>)}</select></label>
@@ -65,8 +66,8 @@ export default async function Registrations({ params, searchParams }: { params: 
                   <td><EditableCell slug={slug} id={r.id} field="gender" value={r.gender} options={[...GENDERS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="mobile" value={r.mobile} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="sports" value={r.sportList.join(', ')} />{r.waitlistList.length > 0 && <small className="wl"> waitlist: {r.waitlistList.join(', ')}</small>}</td>
-                  <td><EditableCell slug={slug} id={r.id} field="skill" value={r.skill} options={['', ...SKILLS]} /></td>
-                  <td><EditableCell slug={slug} id={r.id} field="diet" value={r.diet} options={[...DIETS]} /></td>
+                  <td>{r.sportList.map((sp) => `${sp}: ${skillsOf(r)[sp] || "-"}`).join(", ")}</td>
+                  <td><EditableCell slug={slug} id={r.id} field="diet" value={r.diet} options={["", ...diets]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="tshirt" value={r.tshirt} options={['', ...TSHIRTS]} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="accessibility" value={r.accessibility} /></td>
                   <td><EditableCell slug={slug} id={r.id} field="kind" value={r.kind} options={['member', 'guest']} /></td>

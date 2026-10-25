@@ -1,14 +1,14 @@
 'use client'
 import { useActionState } from 'react'
 import { walkInAction, type WalkInState } from '@/app/staff-actions'
-import { DIETS, GENDERS, SKILLS } from '@/lib/registration/rules'
+import { GENDERS, SKILLS } from '@/lib/registration/rules'
 import { sportIcon } from '@/lib/sports'
 import Pic from '@/components/Pic'
 
-type Props = { slug: string; eventId: number; sports: string[]; registrationId: number | null; ticket: string; title: string }
+type Props = { slug: string; eventId: number; sports: string[]; diets?: string[]; registrationId: number | null; ticket: string; title: string }
 
 /** Spot registration. With a registrationId the person joins that family; without one it is a separate entry with its own contact. */
-export default function WalkInForm({ slug, eventId, sports, registrationId, ticket, title }: Props) {
+export default function WalkInForm({ slug, eventId, sports, diets = [], registrationId, ticket, title }: Props) {
   const [state, action, pending] = useActionState<WalkInState | undefined, FormData>(walkInAction.bind(null, slug, eventId, registrationId, ticket), undefined)
   const e = (k: string) => state?.rowErrors?.[k] ?? state?.contactErrors?.[k]
   const v = (k: string) => (state?.values?.[k] as string | undefined) ?? ''
@@ -26,7 +26,7 @@ export default function WalkInForm({ slug, eventId, sports, registrationId, tick
           <label>Gender<select name="gender" required defaultValue={v('gender')}><option value="" disabled>Select</option>{GENDERS.map((g) => <option key={g}>{g}</option>)}</select>{e('gender') && <small role="alert" className="cellerr">{e('gender')}</small>}</label>
           {field('mobile', 'Mobile (adults)', { inputMode: 'tel' })}
           <label>Skill<select name="skill" defaultValue={v('skill') || 'casual'}>{SKILLS.map((g) => <option key={g}>{g}</option>)}</select></label>
-          <label>Diet<select name="diet" defaultValue={v('diet') || 'Vegetarian'}>{DIETS.map((g) => <option key={g}>{g}</option>)}</select></label>
+          {diets.length > 0 && <label>Diet<select name="diet" defaultValue={v('diet')}><option value="">Select</option>{diets.map((g) => <option key={g}>{g}</option>)}</select></label>}
           <label>Member or Guest<select name="kind" defaultValue={v('kind') || 'guest'}><option value="guest">Guest</option><option value="member">Member</option></select></label>
         </div>
         <fieldset><legend>Sports</legend>

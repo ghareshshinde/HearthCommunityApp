@@ -67,3 +67,9 @@ header.site a{text-decoration:none;color:inherit}
 .tag.on{background:var(--color-primary);color:#fff;border-color:var(--color-primary)}
 @media print{header.site,form button,.btn{display:none}}
 .won{font-weight:800}.lost{color:var(--color-text-secondary)}
+
+.skills{display:flex;flex-direction:column;gap:.25rem}
+.skillrow{display:flex;align-items:center;gap:.4rem;font-size:.8rem}
+.skillrow span{min-width:5.5rem}
+.grid-table tr.flash td{background:#fff7d6;transition:background .3s}
+.grid-table td.actions{white-space:nowrap}

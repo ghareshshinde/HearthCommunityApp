@@ -13,6 +13,7 @@ export function getDb(): DatabaseSync {
   db = new DatabaseSync(path)
   db.exec('pragma journal_mode = wal; pragma foreign_keys = on;')
   db.exec(SCHEMA)
+  addColumn(db, 'participant', 'skills', "text not null default ''")
   addColumn(db, 'participant', 'waitlist', "text not null default '[]'")
   addColumn(db, 'participant', 'source', "text not null default 'online'")
   addColumn(db, 'participant', 'checked_in_at', 'text')

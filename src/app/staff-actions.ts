@@ -78,7 +78,7 @@ export async function walkInAction(slug: string, eventId: number, registrationId
   if (!ev) return { error: 'Event not found', values }
   const person: ParticipantInput = {
     name: String(form.get('name') ?? ''), age: String(form.get('age') ?? ''), gender: String(form.get('gender') ?? ''), mobile: String(form.get('mobile') ?? ''),
-    email: '', sports: form.getAll('sports').map(String), skill: String(form.get('skill') ?? ''), diet: String(form.get('diet') ?? 'Vegetarian'),
+    email: '', sports: form.getAll('sports').map(String), skill: String(form.get('skill') ?? ''), skills: {}, diet: String(form.get('diet') ?? ''),
     tshirt: '', accessibility: '', kind: String(form.get('kind') ?? 'guest'),
   }
   const adult = Number(person.age) >= 18
