@@ -3,7 +3,7 @@ import { currentEvent } from '@/lib/repo'
 import { canSeeSport, requireActor } from '@/lib/session'
 import { listCompetitions, listEntries, listMatches, podium } from '@/lib/sports-ops'
 import { createCompetitionAction } from '@/app/sports-actions'
-import { sportIcon } from '@/lib/sports'
+import { defaultTeamSize, sportFormats, sportIcon } from '@/lib/sports'
 import Pic from '@/components/Pic'
 
 const FORMAT: Record<string, string> = { knockout: 'Knockout', roundrobin: 'Round robin' }
@@ -45,12 +45,16 @@ export default async function Categories({ params, searchParams }: { params: Pro
         <label>Name<input name="name" required placeholder="Men's singles" maxLength={60} /></label>
         <div className="fields">
           <label>Who plays
-            <select name="entryType" defaultValue="singles"><option value="singles">Singles (one player)</option><option value="doubles">Doubles (pairs)</option><option value="team">Teams</option></select>
+            <select name="entryType" defaultValue={sportFormats(sport)[0]}>
+              {sportFormats(sport).includes('singles') && <option value="singles">Singles (one player)</option>}
+              {sportFormats(sport).includes('doubles') && <option value="doubles">Doubles (pairs)</option>}
+              {sportFormats(sport).includes('team') && <option value="team">Teams</option>}
+            </select>
           </label>
           <label>Format
             <select name="format" defaultValue="knockout"><option value="knockout">Knockout</option><option value="roundrobin">Round robin (everyone plays everyone)</option></select>
           </label>
-          <label>Team size (teams only)<input name="teamSize" type="number" min={2} max={15} defaultValue={5} /></label>
+          {sportFormats(sport).includes('team') && <label>Team size<input name="teamSize" type="number" min={2} max={15} defaultValue={defaultTeamSize(sport)} /></label>}
           <label>Gender
             <select name="gender" defaultValue=""><option value="">Open to all</option><option>Male</option><option>Female</option></select>
           </label>

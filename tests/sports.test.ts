@@ -263,19 +263,19 @@ describe('who can be entered', () => {
 
 describe('doubles and pairing', () => {
   it('a pair needs exactly two eligible players and is named after them', () => {
-    const ids = players(4)
-    const c = newComp({ entryType: 'doubles', name: 'Open doubles' })
+    const ids = players(4, () => ({ sports: ['Badminton'] }))
+    const c = newComp({ sport: 'Badminton', entryType: 'doubles', name: 'Open doubles' })
     expect(ops.addEntry(jsg.id, c, [ids[0]], 'coord').ok).toBe(false)
     const r = ok(ops.addEntry(jsg.id, c, [ids[0], ids[1]], 'coord'))
     expect(ops.listEntries(jsg.id, c).find((e) => e.id === r.id)!.name).toBe('Player A + Player B')
     expect(ops.addEntry(jsg.id, c, [ids[1], ids[2]], 'coord').ok).toBe(false) // a player sits in one pair per category
   })
   it('suggestions put mutual requests first, then one-sided requests, then similar players, and create nothing by themselves', () => {
-    const ids = players(8, (i) => ({ gender: i < 4 ? 'Male' : 'Female', skill: ['competitive', 'casual', 'beginner', 'casual'][i % 4], age: 20 + i }))
-    const c = newComp({ entryType: 'doubles' })
-    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Chess', ids[0], ids[3], 'friends', 'coord'))
-    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Chess', ids[3], ids[0], '', 'coord'))
-    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Chess', ids[1], ids[2], '', 'coord'))
+    const ids = players(8, (i) => ({ sports: ['Badminton'], gender: i < 4 ? 'Male' : 'Female', skill: ['competitive', 'casual', 'beginner', 'casual'][i % 4], age: 20 + i }))
+    const c = newComp({ sport: 'Badminton', entryType: 'doubles' })
+    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Badminton', ids[0], ids[3], 'friends', 'coord'))
+    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Badminton', ids[3], ids[0], '', 'coord'))
+    ok(ops.addPartnerRequest(jsg.id, ev.id, 'Badminton', ids[1], ids[2], '', 'coord'))
     const s = ops.suggestPairs(jsg.id, ops.getCompetition(jsg.id, c)!)
     expect(s[0]).toMatchObject({ reason: 'mutual' })
     expect([s[0].a.id, s[0].b.id].sort()).toEqual([ids[0], ids[3]].sort())
@@ -284,16 +284,33 @@ describe('doubles and pairing', () => {
     const used = s.flatMap((x) => [x.a.id, x.b.id])
     expect(new Set(used).size).toBe(used.length)
     expect(ops.listEntries(jsg.id, c)).toHaveLength(0)
-    expect(ops.addPartnerRequest(jsg.id, ev.id, 'Chess', ids[0], ids[0], '', 'coord').ok).toBe(false)
+    expect(ops.addPartnerRequest(jsg.id, ev.id, 'Badminton', ids[0], ids[0], '', 'coord').ok).toBe(false)
     expect(ops.addPartnerRequest(jsg.id, ev.id, 'Carrom', ids[0], ids[1], '', 'coord').ok).toBe(false) // not registered for that sport
   })
   it('a team has a name and a size limit', () => {
-    const ids = players(6)
-    const c = newComp({ entryType: 'team', teamSize: 4, name: 'Teams' })
+    const ids = players(6, () => ({ sports: ['Cricket'] }))
+    const c = newComp({ sport: 'Cricket', entryType: 'team', teamSize: 4, name: 'Teams' })
     expect(ops.addEntry(jsg.id, c, ids.slice(0, 3), 'coord').ok).toBe(false) // no name
     expect(ops.addEntry(jsg.id, c, ids.slice(0, 5), 'coord', 'Too Big').ok).toBe(false)
     ok(ops.addEntry(jsg.id, c, ids.slice(0, 3), 'coord', 'Lotus XI'))
     expect(ops.listEntries(jsg.id, c)[0]).toMatchObject({ name: 'Lotus XI' })
+  })
+})
+
+describe('formats per sport', () => {
+  it('only allows how each sport is played at this event', () => {
+    const mk = (sport: string, entryType: ops.NewCompetition['entryType']) =>
+      ops.createCompetition(jsg.id, { eventId: ev.id, sport, name: 'X', format: 'knockout', entryType }, 'c').ok
+    for (const sp of ['Badminton', 'Table Tennis', 'Carrom', 'Pickleball']) {
+      expect(mk(sp, 'singles'), sp).toBe(true)
+      expect(mk(sp, 'doubles'), sp).toBe(true)
+      expect(mk(sp, 'team'), sp).toBe(false)
+    }
+    expect(mk('Chess', 'singles')).toBe(true)
+    expect(mk('Chess', 'doubles')).toBe(false)
+    expect(mk('Chess', 'team')).toBe(false)
+    expect(mk('Cricket', 'team')).toBe(true)
+    expect(mk('Cricket', 'singles')).toBe(false)
   })
 })
 

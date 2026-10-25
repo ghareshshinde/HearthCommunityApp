@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { sportFormats } from './sports'
 import { audit, getEvent, listRows, type Row } from './repo'
 
 // ---------- types ----------
@@ -41,6 +42,7 @@ export function createCompetition(cid: number, c: NewCompetition, by: string): R
   if (!name || name.length > 60) return fail('Give the category a name (up to 60 characters)')
   if (!['knockout', 'roundrobin'].includes(c.format)) return fail('Choose a format')
   if (!['singles', 'doubles', 'team'].includes(c.entryType)) return fail('Choose singles, doubles or team')
+  if (!sportFormats(c.sport).includes(c.entryType)) return fail(`${c.sport} is played as ${sportFormats(c.sport).join(' or ')} only`)
   const teamSize = c.entryType === 'singles' ? 1 : c.entryType === 'doubles' ? 2 : Math.min(15, Math.max(2, Math.floor(c.teamSize ?? 5)))
   const gender = c.gender === 'Male' || c.gender === 'Female' ? c.gender : ''
   const min = c.minAge && c.minAge > 0 ? Math.floor(c.minAge) : null
